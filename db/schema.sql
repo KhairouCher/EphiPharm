@@ -94,9 +94,13 @@ CREATE TABLE doctors (
 -- ---------------------------------------------------------------------
 -- Suppliers / laboratories
 -- ---------------------------------------------------------------------
+-- FOURNIS.DBF's own CODE field turned out to be a constant ('213', Algeria's
+-- country code) across every one of its 81 rows — not a real identifier.
+-- N_O is what's actually unique per row, confirmed against the real data,
+-- so that's the legacy key here, not CODE.
 CREATE TABLE suppliers (
     id INTEGER PRIMARY KEY,
-    legacy_code TEXT UNIQUE NOT NULL,
+    legacy_code TEXT UNIQUE NOT NULL,              -- = FOURNIS.N_O
     sigle TEXT,
     name TEXT NOT NULL,
     country_id INTEGER REFERENCES countries(id),
@@ -104,9 +108,12 @@ CREATE TABLE suppliers (
     contact TEXT
 );
 
+-- LABORAT.DBF's CODE is a country code (shared numbering with PAYS.CODE,
+-- confirmed — e.g. '213'=Algerie, '033'=France) and is NOT unique alone;
+-- N_O distinguishes labs within a country. The real key is (CODE, N_O).
 CREATE TABLE laboratories (
     id INTEGER PRIMARY KEY,
-    legacy_code TEXT UNIQUE NOT NULL,
+    legacy_code TEXT UNIQUE NOT NULL,              -- = LABORAT.CODE || '-' || LABORAT.N_O
     name TEXT NOT NULL,
     country_id INTEGER REFERENCES countries(id)
 );
@@ -141,7 +148,10 @@ CREATE TABLE dosage_forms (
 -- the running app before relying on it for controlled-substance handling)
 CREATE TABLE dci (                                -- Denomination Commune Internationale
     id INTEGER PRIMARY KEY,
-    legacy_code TEXT UNIQUE NOT NULL,             -- C_T+N_O+S_T in the old file
+    legacy_code TEXT UNIQUE NOT NULL,             -- C_T+N_O (5 chars), confirmed unique across
+                                                   -- all 1595 source rows and the join key
+                                                   -- DOTATION/PRODUITS actually use (S_T is a
+                                                   -- sub-variant flag, not part of the key)
     subclass_id INTEGER REFERENCES therapeutic_subclasses(id),
     form_id INTEGER REFERENCES dosage_forms(id),
     name TEXT NOT NULL,
@@ -157,16 +167,40 @@ CREATE TABLE dci (                                -- Denomination Commune Intern
     withdrawn_on TEXT                              -- NULL = active
 );
 
-CREATE TABLE products (                            -- PRODUITS.DBF (commercial products)
+-- PRODUITS.DBF (commercial products). legacy_code is NOT unique on its own:
+-- confirmed against the real data that the same drug code can have 2-3 rows
+-- (32 such codes in the source), distinguished by legacy_fournis_raw.
+-- stock_lots and movements key off the 10-char composite CODE+FOURNIS the
+-- legacy app used (confirmed 100% match against stock.code / mvt.code_prod
+-- — every single row), so the real unique key here is
+-- (legacy_code, legacy_fournis_raw), not legacy_code alone.
+--
+-- supplier_id is intentionally left UNRESOLVED by the migration script.
+-- PRODUITS.FOURNIS is a 5-char field whose first 3 digits match the same
+-- numbering PAYS and LABORAT use for countries (e.g. '213'=Algerie), and
+-- whose last 2 digits often also matches some SUPPLIERS.legacy_code — but
+-- that second match is a false positive: SUPPLIERS.legacy_code (FOURNIS.N_O)
+-- covers 01-81, a wide enough range that almost any 2-digit suffix matches
+-- *something* by coincidence, not because it's the right row. Whether this
+-- field means "distributor" (-> suppliers) or "manufacturer" (-> laborat,
+-- using the first 3 + last 2 digits together) could not be determined from
+-- the file structure alone. legacy_fournis_raw keeps the original value so
+-- this can be resolved later against the running app, instead of guessing
+-- wrong for 1,623 products in a system that tracks real medication.
+CREATE TABLE products (
     id INTEGER PRIMARY KEY,
-    legacy_code TEXT UNIQUE NOT NULL,
-    supplier_id INTEGER REFERENCES suppliers(id),
+    legacy_code TEXT NOT NULL,
+    legacy_fournis_raw TEXT NOT NULL,
+    dci_id INTEGER REFERENCES dci(id),
+    supplier_id INTEGER REFERENCES suppliers(id),   -- left NULL by the migration, see above
+    laboratory_id INTEGER REFERENCES laboratories(id), -- also left NULL, same reason
     name TEXT NOT NULL,
     form_id INTEGER REFERENCES dosage_forms(id),
     amm_original_no TEXT, amm_original_date TEXT,  -- original marketing authorization
     amm_algeria_no TEXT, amm_algeria_date TEXT,     -- Algerian marketing authorization
     withdrawn_on TEXT,                              -- NULL = active
-    localisation TEXT
+    localisation TEXT,
+    UNIQUE (legacy_code, legacy_fournis_raw)
 );
 
 -- ---------------------------------------------------------------------
@@ -192,6 +226,18 @@ CREATE INDEX idx_stock_lots_expiry ON stock_lots(expires_on);
 -- distinguishes receipt / delivery / correction / etc. Each row is one
 -- line of one operation (an operation groups several lines by operation_no).
 -- ---------------------------------------------------------------------
+-- IMPORTANT: operation_no + line_no is NOT a usable unique key, despite
+-- looking like one. Checked directly against the real MVT.DBF: there are
+-- only 103 distinct (operation_no, line_no) pairs across 97,592 real rows
+-- (234 even including movement_type in the key) — NUM_OPER is reused on a
+-- much smaller scale than its name suggests, not a stable per-transaction
+-- id. An earlier version of this schema had UNIQUE(operation_no, line_no)
+-- here, which silently dropped 97,489 of 97,592 rows on import (99.9% of
+-- the stock movement history) — caught by actually running the migration
+-- against the real data and checking the row counts, not assumed safe.
+-- Each row's real identity is just "this record from MVT.DBF" — the
+-- surrogate id below is the only thing to rely on; do not add a uniqueness
+-- constraint on the legacy fields without re-verifying against real data.
 CREATE TABLE movements (
     id INTEGER PRIMARY KEY,
     operation_no INTEGER NOT NULL,
@@ -206,17 +252,23 @@ CREATE TABLE movements (
     quantity_moved INTEGER NOT NULL,
     unit_price_centimes INTEGER,
     service_ref TEXT,
-    pharmacist_ref TEXT,
-    UNIQUE (operation_no, line_no)
+    pharmacist_ref TEXT
 );
+CREATE INDEX idx_movements_operation ON movements(operation_no, line_no);
 CREATE INDEX idx_movements_date ON movements(moved_on);
 CREATE INDEX idx_movements_product ON movements(product_id);
 
-CREATE TABLE deliveries (                            -- LIVRAISO.DBF: one row per delivery slip
+-- LIVRAISO.DBF: one row per delivery slip. SERVICE is a bare code with no
+-- confirmed (establishment, service) pairing in this table (unlike
+-- DOTATION, which carries both halves) — legacy_service_raw keeps the
+-- original value; service_id is left NULL by the migration until that's
+-- checked against the running app.
+CREATE TABLE deliveries (
     id INTEGER PRIMARY KEY,
     operation_no INTEGER NOT NULL,
     slip_no INTEGER NOT NULL,
     delivered_on TEXT NOT NULL,
+    legacy_service_raw TEXT,
     service_id INTEGER REFERENCES services(id),
     amount_centimes INTEGER NOT NULL,
     document_no TEXT,
@@ -225,12 +277,19 @@ CREATE TABLE deliveries (                            -- LIVRAISO.DBF: one row pe
     pharmacist_ref TEXT
 );
 
-CREATE TABLE receipts (                              -- RECEPT.DBF: one row per supplier receipt slip
+-- RECEPT.DBF: one row per supplier receipt slip. TIERS (legacy_tiers_raw)
+-- is NOT cleanly a supplier code: checked against the real data and it's a
+-- mix of formats (5-digit codes like products' supplier field, bare 1-2
+-- digit numbers, and what look like 8-digit establishment/center codes) —
+-- only ~9% matched suppliers.legacy_code directly. Left unresolved rather
+-- than guessed, same reasoning as products.supplier_id in schema.sql above.
+CREATE TABLE receipts (
     id INTEGER PRIMARY KEY,
     operation_no INTEGER NOT NULL,
     slip_no INTEGER NOT NULL,
     received_on TEXT NOT NULL,
-    supplier_id INTEGER REFERENCES suppliers(id),
+    legacy_tiers_raw TEXT,
+    supplier_id INTEGER REFERENCES suppliers(id),   -- left NULL by the migration, see above
     amount_centimes INTEGER NOT NULL,
     document_no TEXT,
     movement_type TEXT NOT NULL

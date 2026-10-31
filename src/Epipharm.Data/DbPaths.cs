@@ -6,17 +6,12 @@ namespace Epipharm.Data
     /// <summary>
     /// Resolves where epipharm.sqlite lives.
     ///
-    /// IMPORTANT — unresolved architecture question, flagged here rather than
-    /// silently defaulted: SQLite is a single local file. If this hospital
-    /// pharmacy runs on more than one PC (the legacy app's RESEAUX/Reseau
-    /// folders suggest it did — a shared-network setup existed), several
-    /// people opening the same .sqlite file concurrently over a network
-    /// share is unreliable and can corrupt the database. Before rollout,
-    /// confirm how many PCs need write access at once:
-    ///   - one PC only -> local file is fine, nothing to change.
-    ///   - several PCs -> this needs a real server backend (e.g. the same
-    ///     schema in SQL Server Express / PostgreSQL, or an API server this
-    ///     app talks to) before go-live, not a network-shared .sqlite file.
+    /// Confirmed with the hospital: a single PC for now, so a local SQLite
+    /// file is the right call and nothing more is needed here. If a second
+    /// PC is ever added, re-open this: concurrent writers over a network
+    /// share are unreliable with SQLite, and it would need a real server
+    /// backend instead (e.g. this same schema in SQL Server Express /
+    /// PostgreSQL, or an API server this app talks to).
     /// </summary>
     public static class DbPaths
     {
