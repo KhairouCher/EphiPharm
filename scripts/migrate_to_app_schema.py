@@ -178,10 +178,18 @@ def main():
             unmatched_center += 1
         service_rows.append((r['code_et'], r['code'], name, r['adresse'].strip(),
                               r['nbre_litt'], r['nbre_lito'], r['categorie'], r['telephone'].strip(), r['fax'].strip()))
+    # legacy_center_code (CODE_ET) is a real column in db/schema.sql but was
+    # never actually in this INSERT's column list — left NULL for every one
+    # of the 81 rows despite the schema comment promising it. Found while
+    # building the delivery-entry screen, which needs to filter services by
+    # establishment (confirmed from a real screenshot that deliveries in
+    # this data belong to code_et='23124010', not '25120305' — see
+    # DeliveryEntryRepository). Fixed here rather than worked around in the
+    # app layer, since the column already exists for exactly this.
     out.executemany(
-        "INSERT INTO services(legacy_code, sigle, name, address, beds_civil, beds_military, category, phone, fax) "
-        "VALUES (?,?,?,?,?,?,?,?,?)",
-        [(f"{et}:{code}", code, name, addr, bc, bm, cat, ph, fax)
+        "INSERT INTO services(legacy_code, legacy_center_code, sigle, name, address, beds_civil, beds_military, "
+        "category, phone, fax) VALUES (?,?,?,?,?,?,?,?,?,?)",
+        [(f"{et}:{code}", et, code, name, addr, bc, bm, cat, ph, fax)
          for et, code, name, addr, bc, bm, cat, ph, fax in service_rows])
     report('services', out.execute("SELECT count(*) FROM services").fetchone()[0])
     if unmatched_name:
