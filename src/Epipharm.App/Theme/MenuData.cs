@@ -13,7 +13,8 @@ namespace Epipharm.App.Theme
     /// </summary>
     public static class MenuData
     {
-        public static List<MenuCategory> BuildCategories(Action openStock, Action<string> showNotBuilt)
+        public static List<MenuCategory> BuildCategories(Action openStock, Action openReceipts,
+            Action openDeliveries, Action<string> showNotBuilt)
         {
             MenuOption Leaf(string name) => new MenuOption(name, () => showNotBuilt(name));
 
@@ -73,6 +74,12 @@ namespace Epipharm.App.Theme
                     Leaf("Transfert Inter-Etablissements"),
                     Leaf("Retour des Produits du Service"),
                     Leaf("Duplicata de Bons de Livraison"),
+                    // From MENU_MAP.md section 2 (string-extracted, not
+                    // seen in a DISTRIBUTION screenshot) — appended here
+                    // rather than inserted among the screenshot-confirmed
+                    // items above, so this item's position isn't claimed
+                    // as confirmed, only its existence and wording.
+                    new MenuOption("Liste Globale des Bons de Livraison/Restitution", openDeliveries),
                 }),
 
                 // From MENU_MAP.md's "Orders" and "Supplier receipts"
@@ -85,7 +92,7 @@ namespace Epipharm.App.Theme
                     Leaf("Annulation Commande"),
                     Leaf("Reception de Produits"),
                     Leaf("Duplicata de Bon de Reception"),
-                    Leaf("Liste Globale des Bons de Reception"),
+                    new MenuOption("Liste Globale des Bons de Reception", openReceipts),
                 }),
 
                 // From MENU_MAP.md's "Reports / listings" section
