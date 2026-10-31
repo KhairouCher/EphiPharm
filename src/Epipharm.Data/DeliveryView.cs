@@ -17,7 +17,15 @@ namespace Epipharm.Data
         public DateTime DeliveredOn { get; set; }
         public string LegacyServiceRaw { get; set; }
         public string ServiceName { get; set; }
-        public int AmountCentimes { get; set; }
+
+        /// <summary>
+        /// long, not int — see ReceiptView.AmountCentimes for why. The real
+        /// deliveries data tops out at ~11.97 million DZD today (within
+        /// Int32's ~21.5 million DZD range), but receipts' equivalent field
+        /// already proved this pattern overflows, so this is fixed the
+        /// same way rather than waiting for deliveries data to grow into it.
+        /// </summary>
+        public long AmountCentimes { get; set; }
         public string DocumentNo { get; set; }
         public string MovementType { get; set; }
 

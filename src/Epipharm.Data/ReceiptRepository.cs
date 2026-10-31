@@ -22,10 +22,11 @@ namespace Epipharm.Data
         }
 
         /// <summary>
-        /// Matches on document number or the raw legacy supplier/tiers code
-        /// (there's no resolved supplier name to search by yet — see
-        /// ReceiptView). Most recent first, same as the legacy "Liste
-        /// Globale des Bons de Reception" default order.
+        /// Matches on document number, the raw legacy TIERS code, or the
+        /// resolved supplier name (see ReceiptView.Tiers — which this
+        /// mirrors) where the migration could decode one. Most recent
+        /// first, same as the legacy "Liste Globale des Bons de Reception"
+        /// default order.
         /// </summary>
         public List<ReceiptView> Search(string query)
         {
@@ -40,7 +41,7 @@ namespace Epipharm.Data
                     "s.name AS supplier_name, r.amount_centimes, r.document_no, r.movement_type " +
                     "FROM receipts r " +
                     "LEFT JOIN suppliers s ON s.id = r.supplier_id " +
-                    "WHERE r.document_no LIKE @like OR r.legacy_tiers_raw LIKE @like " +
+                    "WHERE r.document_no LIKE @like OR r.legacy_tiers_raw LIKE @like OR s.name LIKE @like " +
                     "ORDER BY r.received_on DESC, r.id DESC;";
                 cmd.Parameters.AddWithValue("@like", like);
 
@@ -56,7 +57,7 @@ namespace Epipharm.Data
                             ReceivedOn = ParseDate(reader["received_on"] as string),
                             LegacyTiersRaw = reader["legacy_tiers_raw"] as string,
                             SupplierName = reader["supplier_name"] as string,
-                            AmountCentimes = Convert.ToInt32(reader["amount_centimes"]),
+                            AmountCentimes = Convert.ToInt64(reader["amount_centimes"]),
                             DocumentNo = reader["document_no"] as string,
                             MovementType = reader["movement_type"] as string
                         });

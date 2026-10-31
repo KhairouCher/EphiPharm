@@ -27,6 +27,32 @@ before being written here, not assumed from field names:
   - dotation.code_dci     = dci.legacy_code, confirmed 5421/5421 match
   - dotation.code_et/
     code_serv              -> services, via (code_et, code) composite
+  - products.laboratory_id = PRODUITS.FOURNIS (5 chars) decodes as
+                             LABORAT.CODE (3, country) + LABORAT.N_O (2):
+                             confirmed against a real screenshot of the
+                             running app (Nomenclature Commerciale showing
+                             "FRANCE ( FR )" for FOURNIS='03303', which is
+                             exactly LABORAT code='033'/n_o='03' = FRANCE),
+                             then checked at scale: 1622/1622 (100%) of all
+                             5-char FOURNIS values decode to a real LABORAT
+                             row. Supersedes the earlier "ambiguous,
+                             unresolved" note in schema.sql — this is the
+                             manufacturer/laboratory link, not a supplier.
+  - receipts.supplier_id  = RECEPT.TIERS, when it's a 5-char code starting
+                             with '213' (Algeria), decodes as that + a
+                             supplier N_O the same way: confirmed against a
+                             real screenshot of "Reception de Produits"
+                             showing Code Fournisseur 21312 resolving to
+                             "S.A.R.L FARABI M.S", which is exactly
+                             FOURNIS code='213'/n_o='12' in the real data.
+                             At scale: 2344/2410 (97%) of 5-char TIERS
+                             values with a '213' prefix match a real
+                             FOURNIS.N_O. The remaining TIERS formats (1-2
+                             digit, 7-digit, 8-digit — see RECEPT.DBF note
+                             in schema.sql) are a different thing entirely
+                             (establishment/center codes, going by the
+                             Transfert Inter-Etablissement screen using the
+                             same 8-digit shape) and are NOT resolved here.
 
 What this script does NOT yet handle (left for a follow-up pass once the
 core data model is validated against the running app):
@@ -192,7 +218,9 @@ def main():
          for r in raw.execute("SELECT code, n_o, sigle, libelle, adresse, telephone, fax, telex, interloc "
                                "FROM fournis WHERE _deleted=0")])
     report('suppliers', out.execute("SELECT count(*) FROM suppliers").fetchone()[0])
-    # kept for reference even though products don't resolve against it (see schema.sql note)
+    # Used below to resolve receipts.supplier_id (confirmed decoding, see
+    # the note above this function) — not products, which resolve against
+    # laboratories instead (laboratory_ids_by_key, defined after laborat).
     supplier_ids_by_no = {r[0]: r[1] for r in out.execute("SELECT legacy_code, id FROM suppliers")}
 
     # LABORAT.CODE is a country code (same numbering as PAYS.CODE, confirmed:
@@ -203,6 +231,16 @@ def main():
         [(f"{r['code']}-{r['n_o']}", r['libelle'].strip(), country_ids.get(r['code']))
          for r in raw.execute("SELECT code, n_o, libelle FROM laborat WHERE _deleted=0")])
     report('laboratories', out.execute("SELECT count(*) FROM laboratories").fetchone()[0])
+    laboratory_ids_by_key = {r[0]: r[1] for r in out.execute("SELECT legacy_code, id FROM laboratories")}
+
+    def laboratory_id_for_fournis(raw_fournis):
+        """PRODUITS.FOURNIS (5 chars) = LABORAT.CODE (3) + LABORAT.N_O (2).
+        See the confirmed-against-a-screenshot note above the function this
+        migration runs in. Returns None (not a guess) for anything that
+        doesn't cleanly decode, rather than forcing a match."""
+        if not raw_fournis or len(raw_fournis) != 5:
+            return None
+        return laboratory_ids_by_key.get(f"{raw_fournis[:3]}-{raw_fournis[3:]}")
 
     # ---- nomenclature --------------------------------------------------------
     out.executemany(
@@ -268,29 +306,35 @@ def main():
         print(f'  NOTE: {unmapped_cat} dci rows had an unrecognized TYPE_MED value, defaulted to autre')
     dci_ids = {r[0]: r[1] for r in out.execute("SELECT legacy_code, id FROM dci")}
 
-    # supplier_id / laboratory_id are intentionally left NULL here — see the
-    # long note on the products table in schema.sql. legacy_fournis_raw keeps
-    # the original value so this can be resolved properly later.
-    product_rows, unmatched_dci = [], 0
+    # supplier_id is still left NULL here — PRODUITS.FOURNIS turned out to
+    # decode against LABORAT (laboratory_id below), not FOURNIS (suppliers);
+    # see the confirmed note above. legacy_fournis_raw keeps the original
+    # value regardless, so this stays checkable against the raw import.
+    product_rows, unmatched_dci, unmatched_lab = [], 0, 0
     for r in raw.execute("SELECT code, fournis, libelle, forme, amm_origin, d_amm_ori, amm_algeri, d_amm_alg, "
                           "retire, date_ret, localisat FROM produits WHERE _deleted=0"):
         dci_id = dci_ids.get(r['code'])
         if dci_id is None:
             unmatched_dci += 1
+        lab_id = laboratory_id_for_fournis(r['fournis'])
+        if lab_id is None:
+            unmatched_lab += 1
         product_rows.append((
-            r['code'], r['fournis'], dci_id, r['libelle'].strip(), form_ids.get(r['forme']),
+            r['code'], r['fournis'], dci_id, lab_id, r['libelle'].strip(), form_ids.get(r['forme']),
             r['amm_origin'], r['d_amm_ori'], r['amm_algeri'], r['d_amm_alg'],
             r['date_ret'] if (r['retire'] or '').strip() else None, r['localisat']))
     out.executemany(
-        "INSERT INTO products(legacy_code, legacy_fournis_raw, dci_id, name, form_id, amm_original_no, "
-        "amm_original_date, amm_algeria_no, amm_algeria_date, withdrawn_on, localisation) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?)", product_rows)
+        "INSERT INTO products(legacy_code, legacy_fournis_raw, dci_id, laboratory_id, name, form_id, "
+        "amm_original_no, amm_original_date, amm_algeria_no, amm_algeria_date, withdrawn_on, localisation) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", product_rows)
     report('products', out.execute("SELECT count(*) FROM products").fetchone()[0])
     if unmatched_dci:
         print(f'  NOTE: {unmatched_dci} products did not match a dci row')
-    print('  NOTE: products.supplier_id and laboratory_id left NULL for every row — the legacy')
-    print('        FOURNIS field is ambiguous between the two, see schema.sql. legacy_fournis_raw')
-    print('        keeps the original value for when this gets resolved against the running app.')
+    if unmatched_lab:
+        print(f'  NOTE: {unmatched_lab} products did not resolve a laboratory_id from FOURNIS (kept as legacy_fournis_raw only)')
+    print('  NOTE: products.supplier_id still left NULL for every row — FOURNIS decodes as a')
+    print('        laboratory (see laboratory_id above), not a supplier; nothing in the source data')
+    print('        links a product directly to the supplier(s) who deliver it.')
     # product lookup keyed by the legacy composite (code, fournis) — this is
     # STILL valid and confirmed 100%, it's self-referential to products' own
     # two fields and doesn't depend on resolving what fournis itself means.
@@ -361,15 +405,31 @@ def main():
     report('deliveries', out.execute("SELECT count(*) FROM deliveries").fetchone()[0])
     print('  NOTE: deliveries.service_id left NULL (legacy_service_raw kept) — see schema.sql note.')
 
+    def supplier_id_for_tiers(raw_tiers):
+        """RECEPT.TIERS, when 5 chars starting with '213' (Algeria), decodes
+        as FOURNIS.CODE (3) + FOURNIS.N_O (2) — same scheme as
+        laboratory_id_for_fournis above, confirmed against a real
+        screenshot (see the note above this function runs in). Other TIERS
+        shapes (1-2 digit, 7-digit, 8-digit) aren't this and are left
+        unresolved, not guessed at."""
+        if not raw_tiers or len(raw_tiers) != 5 or raw_tiers[:3] != '213':
+            return None
+        return supplier_ids_by_no.get(raw_tiers[3:])
+
+    receipt_rows, unmatched_supplier = [], 0
+    for r in raw.execute("SELECT num_oper, num_bon, date_rec, tiers, montant, num_piece, type_mvt FROM recept WHERE _deleted=0"):
+        supplier_id = supplier_id_for_tiers(r['tiers'])
+        if supplier_id is None:
+            unmatched_supplier += 1
+        receipt_rows.append((r['num_oper'], r['num_bon'], r['date_rec'], r['tiers'], supplier_id,
+                              centimes(r['montant']), r['num_piece'], r['type_mvt']))
     out.executemany(
         "INSERT INTO receipts(operation_no, slip_no, received_on, legacy_tiers_raw, supplier_id, "
-        "amount_centimes, document_no, movement_type) VALUES (?,?,?,?,?,?,?,?)",
-        [(r['num_oper'], r['num_bon'], r['date_rec'], r['tiers'], None, centimes(r['montant']),
-          r['num_piece'], r['type_mvt'])
-         for r in raw.execute("SELECT num_oper, num_bon, date_rec, tiers, montant, num_piece, type_mvt FROM recept WHERE _deleted=0")])
+        "amount_centimes, document_no, movement_type) VALUES (?,?,?,?,?,?,?,?)", receipt_rows)
     report('receipts', out.execute("SELECT count(*) FROM receipts").fetchone()[0])
-    print('  NOTE: receipts.supplier_id left NULL (legacy_tiers_raw kept) — see schema.sql note,')
-    print('        only ~9% of TIERS values matched suppliers.legacy_code directly.')
+    print(f'  NOTE: receipts.supplier_id resolved for {len(receipt_rows) - unmatched_supplier}/{len(receipt_rows)} rows')
+    print('        (the "213"+N_O supplier code shape); the rest (other TIERS shapes — see')
+    print('        schema.sql) are left unresolved in legacy_tiers_raw, not guessed at.')
 
     # ---- allocations (dotations) ---------------------------------------------------
     dot_rows, unmatched_dot_service, unmatched_dot_dci = [], 0, 0

@@ -11,10 +11,11 @@ namespace Epipharm.App
     /// Read-only browse of supplier receipts (legacy "Liste Globale des
     /// Bons de Reception" — MENU_MAP.md section 3). Same pale "browse"
     /// archetype and list-first search pattern as StockListForm.
-    /// Tiers (supplier) shows the raw legacy code, not a resolved name:
-    /// receipts.supplier_id is left unresolved by the migration (see
-    /// db/schema.sql's note on RECEPT.DBF's TIERS field), so showing a
-    /// name here would be guessing at a link nobody has confirmed.
+    /// Tiers shows the resolved supplier name where the migration could
+    /// decode one (confirmed "213"+supplier-code TIERS shape — see
+    /// db/schema.sql's note on RECEPT.DBF), falling back to the raw
+    /// legacy code for the other TIERS shapes, which are a different
+    /// thing (establishment transfers, etc.) and not guessed at.
     /// </summary>
     public class ReceiptsListForm : Form
     {
@@ -131,7 +132,7 @@ namespace Epipharm.App
             grid.Columns.Add(new DataGridViewTextBoxColumn
             { Name = "doc", HeaderText = "N. Piece", DataPropertyName = "DocumentNo", FillWeight = 16 });
             grid.Columns.Add(new DataGridViewTextBoxColumn
-            { Name = "tiers", HeaderText = "Tiers (code)", DataPropertyName = "LegacyTiersRaw", FillWeight = 16 });
+            { Name = "tiers", HeaderText = "Tiers (Fournisseur)", DataPropertyName = "Tiers", FillWeight = 20 });
             grid.Columns.Add(new DataGridViewTextBoxColumn
             { Name = "type", HeaderText = "Type", DataPropertyName = "MovementType", FillWeight = 10,
               DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleCenter } });

@@ -56,7 +56,7 @@ namespace Epipharm.Data
                             DeliveredOn = ParseDate(reader["delivered_on"] as string),
                             LegacyServiceRaw = reader["legacy_service_raw"] as string,
                             ServiceName = reader["service_name"] as string,
-                            AmountCentimes = Convert.ToInt32(reader["amount_centimes"]),
+                            AmountCentimes = Convert.ToInt64(reader["amount_centimes"]),
                             DocumentNo = reader["document_no"] as string,
                             MovementType = reader["movement_type"] as string
                         });

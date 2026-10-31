@@ -175,25 +175,26 @@ CREATE TABLE dci (                                -- Denomination Commune Intern
 -- — every single row), so the real unique key here is
 -- (legacy_code, legacy_fournis_raw), not legacy_code alone.
 --
--- supplier_id is intentionally left UNRESOLVED by the migration script.
--- PRODUITS.FOURNIS is a 5-char field whose first 3 digits match the same
--- numbering PAYS and LABORAT use for countries (e.g. '213'=Algerie), and
--- whose last 2 digits often also matches some SUPPLIERS.legacy_code — but
--- that second match is a false positive: SUPPLIERS.legacy_code (FOURNIS.N_O)
--- covers 01-81, a wide enough range that almost any 2-digit suffix matches
--- *something* by coincidence, not because it's the right row. Whether this
--- field means "distributor" (-> suppliers) or "manufacturer" (-> laborat,
--- using the first 3 + last 2 digits together) could not be determined from
--- the file structure alone. legacy_fournis_raw keeps the original value so
--- this can be resolved later against the running app, instead of guessing
--- wrong for 1,623 products in a system that tracks real medication.
+-- PRODUITS.FOURNIS (5 chars) decodes as LABORAT.CODE (3, country) +
+-- LABORAT.N_O (2) — resolved to laboratory_id below. This was genuinely
+-- ambiguous from file structure alone (see the old note this replaced,
+-- kept in git history); resolved for real against a screenshot of the
+-- running app's "Nomenclature Commerciale" screen, which showed
+-- FOURNIS='03303' displaying as "FRANCE ( FR )" — exactly LABORAT
+-- code='033'/n_o='03' = FRANCE — then confirmed at scale: 1622/1622
+-- (100%) of 5-char FOURNIS values decode to a real LABORAT row. See
+-- scripts/migrate_to_app_schema.py's laboratory_id_for_fournis.
+-- supplier_id is left NULL: nothing in the source data links a product to
+-- the supplier(s) who actually deliver it (that's a receipts/mvt-level
+-- fact, not a product-level one) — FOURNIS means manufacturer, not
+-- distributor.
 CREATE TABLE products (
     id INTEGER PRIMARY KEY,
     legacy_code TEXT NOT NULL,
     legacy_fournis_raw TEXT NOT NULL,
     dci_id INTEGER REFERENCES dci(id),
-    supplier_id INTEGER REFERENCES suppliers(id),   -- left NULL by the migration, see above
-    laboratory_id INTEGER REFERENCES laboratories(id), -- also left NULL, same reason
+    supplier_id INTEGER REFERENCES suppliers(id),   -- left NULL, see above — FOURNIS isn't this
+    laboratory_id INTEGER REFERENCES laboratories(id), -- resolved from legacy_fournis_raw, see above
     name TEXT NOT NULL,
     form_id INTEGER REFERENCES dosage_forms(id),
     amm_original_no TEXT, amm_original_date TEXT,  -- original marketing authorization
@@ -278,18 +279,23 @@ CREATE TABLE deliveries (
 );
 
 -- RECEPT.DBF: one row per supplier receipt slip. TIERS (legacy_tiers_raw)
--- is NOT cleanly a supplier code: checked against the real data and it's a
--- mix of formats (5-digit codes like products' supplier field, bare 1-2
--- digit numbers, and what look like 8-digit establishment/center codes) —
--- only ~9% matched suppliers.legacy_code directly. Left unresolved rather
--- than guessed, same reasoning as products.supplier_id in schema.sql above.
+-- is a mix of formats (5-digit supplier codes, bare 1-2 digit numbers, and
+-- what look like 8-digit establishment/center codes, matching the shape
+-- used by the "Transfert Inter-Etablissement" screen). The 5-digit shape
+-- is resolved: confirmed against a screenshot of "Reception de Produits"
+-- showing TIERS=21312 displaying as "S.A.R.L FARABI M.S" — exactly
+-- FOURNIS code='213'/n_o='12' in the real data — then at scale: 2344/2410
+-- (97%) of 5-digit, '213'-prefixed TIERS values match a real FOURNIS.N_O.
+-- The other formats are a different thing (not suppliers) and stay
+-- unresolved in legacy_tiers_raw rather than guessed. See
+-- scripts/migrate_to_app_schema.py's supplier_id_for_tiers.
 CREATE TABLE receipts (
     id INTEGER PRIMARY KEY,
     operation_no INTEGER NOT NULL,
     slip_no INTEGER NOT NULL,
     received_on TEXT NOT NULL,
     legacy_tiers_raw TEXT,
-    supplier_id INTEGER REFERENCES suppliers(id),   -- left NULL by the migration, see above
+    supplier_id INTEGER REFERENCES suppliers(id),   -- resolved for the '213'+N_O shape, see above
     amount_centimes INTEGER NOT NULL,
     document_no TEXT,
     movement_type TEXT NOT NULL
