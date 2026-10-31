@@ -16,6 +16,7 @@ namespace Epipharm.App
     /// </summary>
     public class MainForm : Form
     {
+        private readonly Account _account;
         private readonly string _dbPath;
         private readonly DosHeaderBar _header;
         private readonly DosFooterBar _footer;
@@ -25,6 +26,7 @@ namespace Epipharm.App
 
         public MainForm(Account account, string dbPath)
         {
+            _account = account;
             _dbPath = dbPath;
 
             Text = "EPIPHARM";
@@ -78,7 +80,7 @@ namespace Epipharm.App
             Controls.Add(_footer);
             Controls.Add(_header);
 
-            _categories = MenuData.BuildCategories(OpenStock, OpenReceipts, OpenDeliveries, ShowNotBuilt);
+            _categories = MenuData.BuildCategories(OpenStock, OpenReceipts, OpenReceiptEntry, OpenDeliveries, ShowNotBuilt);
             if (account.IsAdmin)
             {
                 _categories.Add(new MenuCategory("ADMINISTRATION", new List<MenuOption>
@@ -187,6 +189,17 @@ namespace Epipharm.App
         {
             var repo = new ReceiptRepository(_dbPath);
             using (var form = new ReceiptsListForm(repo))
+            {
+                form.ShowDialog(this);
+            }
+        }
+
+        private void OpenReceiptEntry()
+        {
+            var entryRepo = new ReceiptEntryRepository(_dbPath);
+            var supplierRepo = new SupplierRepository(_dbPath);
+            var productRepo = new ProductRepository(_dbPath);
+            using (var form = new ReceiptEntryForm(entryRepo, supplierRepo, productRepo, _account.Id))
             {
                 form.ShowDialog(this);
             }

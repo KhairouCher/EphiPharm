@@ -13,8 +13,8 @@ namespace Epipharm.App.Theme
     /// </summary>
     public static class MenuData
     {
-        public static List<MenuCategory> BuildCategories(Action openStock, Action openReceipts,
-            Action openDeliveries, Action<string> showNotBuilt)
+        public static List<MenuCategory> BuildCategories(Action openStock, Action openReceiptsList,
+            Action openReceiptEntry, Action openDeliveries, Action<string> showNotBuilt)
         {
             MenuOption Leaf(string name) => new MenuOption(name, () => showNotBuilt(name));
 
@@ -90,9 +90,9 @@ namespace Epipharm.App.Theme
                     Leaf("Edition Commande"),
                     Leaf("Liste des Commandes"),
                     Leaf("Annulation Commande"),
-                    Leaf("Reception de Produits"),
+                    new MenuOption("Reception de Produits", openReceiptEntry),
                     Leaf("Duplicata de Bon de Reception"),
-                    new MenuOption("Liste Globale des Bons de Reception", openReceipts),
+                    new MenuOption("Liste Globale des Bons de Reception", openReceiptsList),
                 }),
 
                 // From MENU_MAP.md's "Reports / listings" section

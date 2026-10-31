@@ -60,6 +60,19 @@ namespace Epipharm.App.Theme
         public static readonly Color BrowseText = Dos16.Blue;
         public static readonly Color BrowseSelectedBack = Dos16.Red;
         public static readonly Color BrowseSelectedText = Dos16.White;
+
+        // A grid *embedded in a Form-B data-entry screen* (e.g. Reception
+        // de Produits' product lines) is not the same archetype as a
+        // whole-screen Browse list (archetype C) — UI_SPEC.md describes it
+        // separately: "white-bordered table with a header row (white text
+        // on blue-ish header strip) and data rows (white/cyan text)" sitting
+        // inside the screen's blue body. Reusing Browse* colors there was
+        // wrong; these are the real screenshot's near-white data rows on a
+        // blue header, not the pale-gray full Browse background.
+        public static readonly Color FormGridBackground = Dos16.White;
+        public static readonly Color FormGridText = Dos16.Blue;
+        public static readonly Color FormGridHeaderBack = Dos16.Blue;
+        public static readonly Color FormGridHeaderText = Dos16.White;
         public static readonly Color SecondaryLabel = Dos16.LightMagenta;
 
         private static Font _dosFont;
@@ -101,6 +114,22 @@ namespace Epipharm.App.Theme
         /// Prefers the real bundled DOS VGA font (loaded above); falls back
         /// to an installed look-alike if present, then to Consolas/Lucida
         /// Console, which every Windows install has.
+        ///
+        /// A requested FontStyle.Bold is honored for the fallback fonts,
+        /// but ignored (forced to Regular) for the bundled Px437 font.
+        /// Real DOS text mode never had a bold font weight at all — "bold"-
+        /// looking text there was always a brighter *color*, never a
+        /// thicker stroke (callers already pick a brighter ForeColor for
+        /// emphasis, e.g. RetroTheme.FieldValue/HeaderTitle). Px437 is a
+        /// single-weight bitmap font with no real bold face, so asking
+        /// GDI+ for Bold made it synthesize one by widening strokes — which
+        /// badly corrupts a font hinted pixel-for-pixel at a fixed size:
+        /// caught by actually looking at a screenshot, where the "NLig"
+        /// grid header (ReceiptEntryForm) rendered as a clearly wrong
+        /// "MLig". Every Bold request elsewhere in the app (menu labels,
+        /// header titles, other grid headers) was silently hitting the
+        /// same synthetic-bold distortion, just on glyphs where it
+        /// happened to be less obviously wrong.
         /// </summary>
         public static Font DosFont(float size, FontStyle style = FontStyle.Regular)
         {
@@ -108,7 +137,7 @@ namespace Epipharm.App.Theme
             {
                 try
                 {
-                    return new Font(BundledFonts.Families[0], size, style);
+                    return new Font(BundledFonts.Families[0], size, FontStyle.Regular);
                 }
                 catch
                 {
