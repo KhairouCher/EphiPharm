@@ -1,0 +1,14 @@
+# Build output
+bin/
+obj/
+*.user
+
+# Data — never commit real or converted hospital data, or plaintext credentials
+*.sqlite
+*.sqlite3
+*.db
+CREDENTIALS_DO_NOT_COMMIT.txt
+
+# OS/editor noise
+.vs/
+*.swp
