@@ -14,9 +14,11 @@ namespace Epipharm.App
     /// </summary>
     public class MainForm : Form
     {
+        private const string StockModule = "Stock";
+
         private static readonly string[] Modules =
         {
-            "Stock",
+            StockModule,
             "Livraisons (vers les services)",
             "Receptions (des fournisseurs)",
             "Commandes",
@@ -26,8 +28,11 @@ namespace Epipharm.App
             "Archivage annuel",
         };
 
-        public MainForm(Account account)
+        private readonly string _dbPath;
+
+        public MainForm(Account account, string dbPath)
         {
+            _dbPath = dbPath;
             Text = "EPIPHARM";
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(560, 520);
@@ -63,9 +68,17 @@ namespace Epipharm.App
                     Padding = new Padding(16, 0, 0, 0),
                     Margin = new Padding(0, 0, 0, 8)
                 };
-                button.Click += (s, e) => MessageBox.Show(
-                    this, $"\"{module}\" n'est pas encore construit.",
-                    "A venir", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                var moduleName = module; // capture for the closure
+                if (moduleName == StockModule)
+                {
+                    button.Click += (s, e) => OpenStock();
+                }
+                else
+                {
+                    button.Click += (s, e) => MessageBox.Show(
+                        this, $"\"{moduleName}\" n'est pas encore construit.",
+                        "A venir", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
                 flow.Controls.Add(button);
             }
 
@@ -88,6 +101,15 @@ namespace Epipharm.App
 
             Controls.Add(flow);
             Controls.Add(header);
+        }
+
+        private void OpenStock()
+        {
+            var repo = new StockRepository(_dbPath);
+            using (var form = new StockListForm(repo))
+            {
+                form.ShowDialog(this);
+            }
         }
     }
 }

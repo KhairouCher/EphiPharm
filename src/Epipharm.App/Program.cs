@@ -38,7 +38,7 @@ namespace Epipharm.App
                     }
                 }
 
-                Application.Run(new MainForm(account));
+                Application.Run(new MainForm(account, dbPath));
             }
         }
 
