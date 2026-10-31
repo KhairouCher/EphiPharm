@@ -93,7 +93,12 @@ namespace Epipharm.App
             {
                 _categoryList.Items.Add(category);
             }
-            _categoryList.DisplayMember = "Name";
+            // No DisplayMember here: DosMenuList is OwnerDrawFixed and draws
+            // its own text from IMenuRow.Name (see DosMenuList.OnDrawItem),
+            // so DisplayMember would be silently ignored — setting it here
+            // previously looked like it worked but never did anything; the
+            // category list actually showed each item's raw ToString()
+            // ("Epipharm.App.Theme.MenuCategory") until IMenuRow was added.
             _categoryList.SelectedIndexChanged += (s, e) => RefreshOptions();
             _optionsList.KeyDown += OptionsList_KeyDown;
             _optionsList.DoubleClick += (s, e) => ChooseSelectedOption();

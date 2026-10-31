@@ -31,17 +31,19 @@ namespace Epipharm.App.Theme
                 return;
             }
 
+            var row = Items[e.Index] as IMenuRow;
+
             var selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
             var back = selected ? RetroTheme.MenuItemSelectedBack : RetroTheme.MenuBackground;
             var fore = selected
                 ? RetroTheme.MenuItemSelectedText
-                : (Items[e.Index] is MenuOption opt && !opt.Confirmed ? Dos16.DarkGray : RetroTheme.MenuItemText);
+                : (row != null && !row.Confirmed ? Dos16.DarkGray : RetroTheme.MenuItemText);
 
             using (var backBrush = new SolidBrush(back))
             using (var foreBrush = new SolidBrush(fore))
             {
                 e.Graphics.FillRectangle(backBrush, e.Bounds);
-                var text = Items[e.Index] is MenuOption option ? option.Name : Items[e.Index]?.ToString();
+                var text = row?.Name ?? Items[e.Index]?.ToString();
                 e.Graphics.DrawString(text, e.Font ?? Font, foreBrush, e.Bounds.X + 8, e.Bounds.Y + 3);
             }
         }

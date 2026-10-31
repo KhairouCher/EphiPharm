@@ -4,13 +4,25 @@ using System.Collections.Generic;
 namespace Epipharm.App.Theme
 {
     /// <summary>
+    /// What DosMenuList needs to draw a row — implemented by both
+    /// MenuCategory (the left "Menu Général" panel) and MenuOption (the
+    /// right "Menu Options" panel, and 3rd-level floating popups), so the
+    /// list doesn't need a type check per kind of item it might hold.
+    /// </summary>
+    public interface IMenuRow
+    {
+        string Name { get; }
+        bool Confirmed { get; }
+    }
+
+    /// <summary>
     /// One leaf of the cascading menu. Action runs when chosen; if
     /// SubOptions is non-empty, choosing it instead opens a third-level
     /// floating list first (see UI_SPEC.md "Livraison sur Bon de Commande"'s
     /// Medicaments Usuels/Psychotropes/Autres Medicaments popup) — the
     /// chosen sub-option's own Action then runs.
     /// </summary>
-    public class MenuOption
+    public class MenuOption : IMenuRow
     {
         public string Name { get; }
         public Action OnChosen { get; }
@@ -31,10 +43,16 @@ namespace Epipharm.App.Theme
         }
     }
 
-    public class MenuCategory
+    public class MenuCategory : IMenuRow
     {
         public string Name { get; }
         public List<MenuOption> Options { get; }
+
+        /// <summary>Always true — every top-level category name comes from
+        /// a screenshot (UI_SPEC.md), unlike individual MenuOption leaves,
+        /// some of which are honest placeholders. IMenuRow needs it so
+        /// DosMenuList can draw both kinds of row the same way.</summary>
+        public bool Confirmed => true;
 
         public MenuCategory(string name, List<MenuOption> options)
         {
