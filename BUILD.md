@@ -22,26 +22,29 @@ me the first error if any; I'll fix it from the message.
 
 ## Setting up the database before first run
 The app looks for `data\epipharm.sqlite` next to the .exe (override with the
-`EPIPHARM_DB_PATH` environment variable). Build it with Python for now:
+`EPIPHARM_DB_PATH` environment variable). Needs Python 3 installed. Three
+steps: import the real DBF files, migrate them into the app's schema, then
+copy the result next to the .exe.
 
 ```powershell
-cd db
-python -c "
-import sqlite3
-db = sqlite3.connect('epipharm.sqlite')
-db.executescript(open('accounts_seed.sql').read())
-db.executescript(open('schema.sql').read())
-db.commit()
-"
+# 1. Import the legacy DBF files into a raw 1:1 SQLite dump
+python importer\import_dbf.py "C:\Users\KhairouCher\Downloads\EPIPHARM EPH DE CHERIA" raw.sqlite
+
+# 2. Migrate that into the app's real schema (also seeds the 6 accounts)
+python scripts\migrate_to_app_schema.py raw.sqlite db\schema.sql db\accounts_seed.sql epipharm.sqlite
 ```
 
-Then copy `db\epipharm.sqlite` into `src\Epipharm.App\bin\Debug\net48\data\`
+Read what step 2 prints — it reports exactly what didn't migrate cleanly
+(a few known gaps: product supplier/lab links, delivery/receipt service
+links, two bad dosage-form codes — see the comments in db/schema.sql and
+the commit history for why each one is left as-is rather than guessed).
+
+Then copy `epipharm.sqlite` into `src\Epipharm.App\bin\Debug\net48\data\`
 (create the `data` folder if it isn't there yet).
 
 This gives you the 6 accounts (new passwords — see the credentials file I
-sent separately) and an empty schema. Importing the real stock/movement data
-into this schema (not just the raw 1:1 DBF dump importer already has) is the
-next piece of work — see MENU_MAP.md and the TODO in db/schema.sql.
+sent separately) plus your real stock, products, movements, deliveries,
+receipts and allocations.
 
 ## Running
 F5 in Visual Studio, or run `Epipharm.exe` directly from the build output
