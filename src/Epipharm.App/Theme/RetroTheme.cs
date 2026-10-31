@@ -1,5 +1,8 @@
+using System;
 using System.Drawing;
 using System.Drawing.Text;
+using System.IO;
+using System.Reflection;
 
 namespace Epipharm.App.Theme
 {
@@ -60,17 +63,59 @@ namespace Epipharm.App.Theme
         public static readonly Color SecondaryLabel = Dos16.LightMagenta;
 
         private static Font _dosFont;
+        private static readonly PrivateFontCollection BundledFonts = LoadBundledFonts();
+
+        /// <summary>
+        /// Loads Px437 IBM VGA 8x16 — the actual DOS VGA text-mode bitmap
+        /// font the legacy app rendered with, not an approximation — from
+        /// Resources/Fonts next to the exe (see NOTICE.md there for its
+        /// source/license). A PrivateFontCollection is used instead of
+        /// installing it, so the app renders correctly on any machine it's
+        /// copied to. The collection itself must be kept alive for as long
+        /// as fonts from it are used (GDI+ requirement), hence the static
+        /// field rather than a local/disposed one.
+        /// </summary>
+        private static PrivateFontCollection LoadBundledFonts()
+        {
+            var collection = new PrivateFontCollection();
+            try
+            {
+                var baseDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) ?? ".";
+                var fontPath = Path.Combine(baseDir, "Resources", "Fonts", "Px437_IBM_VGA_8x16.ttf");
+                if (File.Exists(fontPath))
+                {
+                    collection.AddFontFile(fontPath);
+                }
+            }
+            catch
+            {
+                // Missing/unreadable font file — DosFont below falls back to
+                // an installed or generic monospace font instead of crashing
+                // the whole app over a cosmetic detail.
+            }
+            return collection;
+        }
 
         /// <summary>
         /// A monospace font approximating the original bitmap VGA font.
-        /// Prefers an actual DOS VGA font if one happens to be installed
-        /// (e.g. "Perfect DOS VGA 437" — not bundled, this session couldn't
-        /// fetch it; install it on the build machine for full fidelity),
-        /// falling back to Consolas/Lucida Console, which every Windows
-        /// install has.
+        /// Prefers the real bundled DOS VGA font (loaded above); falls back
+        /// to an installed look-alike if present, then to Consolas/Lucida
+        /// Console, which every Windows install has.
         /// </summary>
         public static Font DosFont(float size, FontStyle style = FontStyle.Regular)
         {
+            if (BundledFonts.Families.Length > 0)
+            {
+                try
+                {
+                    return new Font(BundledFonts.Families[0], size, style);
+                }
+                catch
+                {
+                    // Fall through to the installed/generic options below.
+                }
+            }
+
             foreach (var name in new[] { "Perfect DOS VGA 437", "Px437 IBM VGA8", "Consolas", "Lucida Console" })
             {
                 using (var installed = new InstalledFontCollection())

@@ -15,4 +15,17 @@
     <ProjectReference Include="..\Epipharm.Data\Epipharm.Data.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The real DOS VGA bitmap font (see Resources/Fonts/NOTICE.md) — copied
+         next to the exe so RetroTheme can load it at runtime without it
+         being installed system-wide (PrivateFontCollection, see
+         RetroTheme.cs). -->
+    <Content Include="Resources\Fonts\Px437_IBM_VGA_8x16.ttf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Resources\Fonts\NOTICE.md">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

@@ -5,13 +5,16 @@ Source: 18 phone photos of the running app (PHARMA.EXE under DOSBox/VM) sent
 character-cell level), not a native Windows look — colors below are the
 standard 16-color EGA/VGA palette DOS text mode is limited to, which is a
 more reliable source than eyeballing glare/reflection in phone photos.
-Font was a bitmap VGA font (every character the same cell width); the
-closest free equivalent for this rebuild is a monospace font — true
-pixel-identical reproduction would need an actual DOS VGA bitmap font
-installed (e.g. "Perfect DOS VGA 437" or "Px437 IBM VGA8"), which this
-session couldn't fetch (network restricted to a small allowlist). Worth
-installing on the build machine later for full fidelity; falls back to
-Consolas/Lucida Console until then.
+Font was a bitmap VGA font (every character the same cell width).
+**Update (2026-10-31, local session with real network access):** the
+actual font — Px437 IBM VGA 8x16, a pixel-accurate revival of the real
+IBM VGA text-mode bitmap font, CC BY-SA 4.0 — is now bundled in the repo
+at `src/Epipharm.App/Resources/Fonts/` and loaded at runtime via
+`PrivateFontCollection` (see `RetroTheme.DosFont` and that folder's
+`NOTICE.md`), so it renders correctly on any machine the app is copied
+to without installing anything system-wide. The earlier fallback to
+Consolas/Lucida Console only applies now if that file is somehow
+missing from a build.
 
 ## Palette (standard DOS 16-color, by role)
 
