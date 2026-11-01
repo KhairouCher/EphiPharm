@@ -6,7 +6,11 @@ using Epipharm.App.Theme;
 
 namespace Epipharm.App
 {
-    /// <summary>Forced on first login for every reset account (see scripts/generate_accounts.py).</summary>
+    /// <summary>Forced on first login for every reset account (see
+    /// scripts/generate_accounts.py). No "Enregistrer" button — same
+    /// reasoning as LoginForm: the real entry screens turned out to be
+    /// purely keyboard-driven, so Enter submits here too, hinted only in
+    /// the footer.</summary>
     public class ChangePasswordForm : Form
     {
         private const int MinPasswordLength = 6;
@@ -33,6 +37,7 @@ namespace Epipharm.App
 
             _header = new DosHeaderBar { Subtitle = "Changement de Mot de Passe" };
             _footer = new DosFooterBar();
+            _footer.SetHints(("Entree", "Enregistrer"));
 
             var body = new TableLayoutPanel
             {
@@ -82,29 +87,11 @@ namespace Epipharm.App
             body.Controls.Add(_newPasswordBox, 0, 2);
             body.Controls.Add(confirmLabel, 0, 3);
             body.Controls.Add(_confirmBox, 0, 4);
-
-            var bottomArea = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
-                BackColor = RetroTheme.MenuBackground
-            };
-            var saveButton = new Button
-            {
-                Text = "Enregistrer", AutoSize = true,
-                Font = RetroTheme.DosFont(11F),
-                BackColor = RetroTheme.BoxBorder, ForeColor = RetroTheme.MenuBackground,
-                Padding = new Padding(8, 6, 8, 6)
-            };
-            saveButton.Click += (s, e) => AttemptSave();
-            bottomArea.Controls.Add(saveButton);
-            bottomArea.Controls.Add(_errorLabel);
-            body.Controls.Add(bottomArea, 0, 5);
+            body.Controls.Add(_errorLabel, 0, 5);
 
             Controls.Add(body);
             Controls.Add(_footer);
             Controls.Add(_header);
-
-            AcceptButton = saveButton;
         }
 
         private TextBox FieldBox()
@@ -120,6 +107,7 @@ namespace Epipharm.App
             };
             box.Enter += (s, e) => { box.BackColor = RetroTheme.FieldActiveBack; box.ForeColor = RetroTheme.FieldActiveText; };
             box.Leave += (s, e) => { box.BackColor = RetroTheme.MenuBackground; box.ForeColor = RetroTheme.FieldValue; };
+            box.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { AttemptSave(); e.Handled = true; } };
             return box;
         }
 

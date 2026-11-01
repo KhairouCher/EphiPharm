@@ -12,6 +12,13 @@ namespace Epipharm.App
     /// the legacy login prompt itself was sent, only the main menu after
     /// logging in. The focused field getting a red highlight follows the
     /// same convention seen on every data-entry screenshot.
+    ///
+    /// No "Connexion"/"Quitter" buttons — every entry screen actually
+    /// photographed (ReceiptEntryForm, DeliveryEntryForm) turned out to be
+    /// purely keyboard-driven with no clickable buttons at all, so a
+    /// button row here would be an invented control of exactly the kind
+    /// that cost real fidelity elsewhere. Enter submits, Esc cancels,
+    /// shown only in the footer hints like every other screen.
     /// </summary>
     public class LoginForm : Form
     {
@@ -38,21 +45,20 @@ namespace Epipharm.App
 
             _header = new DosHeaderBar { Subtitle = "Connexion" };
             _footer = new DosFooterBar();
-            _footer.SetHints(("Esc", "Quitter"));
+            _footer.SetHints(("Entree", "Connexion"), ("Esc", "Quitter"));
 
             var body = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 BackColor = RetroTheme.MenuBackground,
                 ColumnCount = 1,
-                RowCount = 6,
+                RowCount = 5,
                 Padding = new Padding(32, 28, 32, 0)
             };
             body.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             body.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             body.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             body.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
-            body.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
             body.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
 
             var userLabel = FieldLabel("Nom d'Utilisateur :");
@@ -60,6 +66,10 @@ namespace Epipharm.App
             var passLabel = FieldLabel("Mot de Passe :");
             _passwordBox = FieldBox();
             _passwordBox.UseSystemPasswordChar = true;
+            // Enter in either field submits — the keyboard-only
+            // equivalent of the AcceptButton this screen no longer has.
+            _usernameBox.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { AttemptLogin(); e.Handled = true; } };
+            _passwordBox.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { AttemptLogin(); e.Handled = true; } };
 
             _errorLabel = new Label
             {
@@ -69,27 +79,15 @@ namespace Epipharm.App
                 TextAlign = ContentAlignment.TopLeft
             };
 
-            var buttonRow = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = RetroTheme.MenuBackground };
-            var loginButton = NewButton("Connexion (Entree)");
-            loginButton.Click += (s, e) => AttemptLogin();
-            var quitButton = NewButton("Quitter (Esc)");
-            quitButton.Click += (s, e) => { DialogResult = DialogResult.Cancel; Close(); };
-            buttonRow.Controls.Add(loginButton);
-            buttonRow.Controls.Add(quitButton);
-
             body.Controls.Add(userLabel, 0, 0);
             body.Controls.Add(_usernameBox, 0, 1);
             body.Controls.Add(passLabel, 0, 2);
             body.Controls.Add(_passwordBox, 0, 3);
-            body.Controls.Add(buttonRow, 0, 4);
-            body.Controls.Add(_errorLabel, 0, 5);
+            body.Controls.Add(_errorLabel, 0, 4);
 
             Controls.Add(body);
             Controls.Add(_footer);
             Controls.Add(_header);
-
-            AcceptButton = loginButton;
-            CancelButton = quitButton;
         }
 
         private Label FieldLabel(string text) => new Label
@@ -117,17 +115,6 @@ namespace Epipharm.App
             box.Leave += (s, e) => { box.BackColor = RetroTheme.MenuBackground; box.ForeColor = RetroTheme.FieldValue; };
             return box;
         }
-
-        private Button NewButton(string text) => new Button
-        {
-            Text = text,
-            AutoSize = true,
-            Font = RetroTheme.DosFont(11F),
-            BackColor = RetroTheme.BoxBorder,
-            ForeColor = RetroTheme.MenuBackground,
-            Margin = new Padding(0, 0, 16, 0),
-            Padding = new Padding(8, 6, 8, 6)
-        };
 
         protected override void OnShown(EventArgs e)
         {
