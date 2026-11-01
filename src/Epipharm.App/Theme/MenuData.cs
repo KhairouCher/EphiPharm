@@ -15,7 +15,8 @@ namespace Epipharm.App.Theme
     {
         public static List<MenuCategory> BuildCategories(Action openStock, Action openReceiptsList,
             Action openReceiptEntry, Action openDeliveriesList, Action openDeliveryEntryMedicaments,
-            Action openDotationEntryMedicaments, Action openDciInfo, Action<string> showNotBuilt)
+            Action openDotationEntryMedicaments, Action openDciInfo, Action openTransferEntry,
+            Action<string> showNotBuilt)
         {
             MenuOption Leaf(string name) => new MenuOption(name, () => showNotBuilt(name));
 
@@ -72,7 +73,7 @@ namespace Epipharm.App.Theme
                     Leaf("Justificatif Stupefiants (Tab B)"),
                     Leaf("Livraison Exceptionnelle"),
                     Leaf("Livraison ORSEC"),
-                    Leaf("Transfert Inter-Etablissements"),
+                    new MenuOption("Transfert Inter-Etablissements", openTransferEntry),
                     Leaf("Retour des Produits du Service"),
                     Leaf("Duplicata de Bons de Livraison"),
                     // From MENU_MAP.md section 2 (string-extracted, not
