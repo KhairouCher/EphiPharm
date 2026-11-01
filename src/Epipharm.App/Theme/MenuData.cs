@@ -15,7 +15,7 @@ namespace Epipharm.App.Theme
     {
         public static List<MenuCategory> BuildCategories(Action openStock, Action openReceiptsList,
             Action openReceiptEntry, Action openDeliveriesList, Action openDeliveryEntryMedicaments,
-            Action openDotationEntryMedicaments, Action<string> showNotBuilt)
+            Action openDotationEntryMedicaments, Action openDciInfo, Action<string> showNotBuilt)
         {
             MenuOption Leaf(string name) => new MenuOption(name, () => showNotBuilt(name));
 
@@ -46,7 +46,7 @@ namespace Epipharm.App.Theme
                 {
                     Leaf("Classes Therapeutiques"),
                     Leaf("S/Classes Therapeutiques"),
-                    Leaf("Nomenclature Nationale"),
+                    new MenuOption("Nomenclature Nationale", openDciInfo),
                     Leaf("Fichier des Etablissements"),
                     Leaf("Table des Services"),
                     Leaf("Table des Pays"),

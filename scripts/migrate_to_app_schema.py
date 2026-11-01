@@ -305,9 +305,15 @@ def main():
             r['libelle'].strip(), cat, 1 if (r['tableau'] or '').strip() else 0,
             r['priorite'], r['stock_mini'], r['stock_secu'], r['point_comm'],
             centimes(r['prix_def']), r['delai_appr'], r['d_rupture']))
+    # D_RUPTURE -> projected_rupture_on, not "withdrawn_on": see the long
+    # comment on this column in db/schema.sql. An earlier version of this
+    # migration called it withdrawn_on and DotationEntryRepository filtered
+    # on it as "is active", which silently hid 184 of 270 medicament DCI
+    # (68%) from the dotation screen — found by checking real counts, not
+    # by inspection.
     out.executemany(
         "INSERT INTO dci(legacy_code, subclass_id, form_id, name, drug_category, tableau_b, priority, "
-        "stock_minimum, stock_safety, reorder_point, default_price_centimes, supply_delay_days, withdrawn_on) "
+        "stock_minimum, stock_safety, reorder_point, default_price_centimes, supply_delay_days, projected_rupture_on) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", dci_rows)
     report('dci', out.execute("SELECT count(*) FROM dci").fetchone()[0])
     if unmapped_cat:

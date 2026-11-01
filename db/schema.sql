@@ -164,7 +164,18 @@ CREATE TABLE dci (                                -- Denomination Commune Intern
     reorder_point INTEGER,
     default_price_centimes INTEGER,
     supply_delay_days INTEGER,
-    withdrawn_on TEXT                              -- NULL = active
+    -- NOT a "discontinued" flag, despite an earlier version of this schema
+    -- naming it withdrawn_on and migrate_to_app_schema.py filtering
+    -- DotationEntryRepository's DCI list on it as if it were one: this is
+    -- DCI.D_RUPTURE, a projected/last stock-rupture date (see MENU_MAP.md's
+    -- "Medicaments en Rupture" report) — common and unrelated to being
+    -- pulled from the catalog. DCI has no raw column for that at all,
+    -- unlike products.withdrawn_on below (a real RETIRE/DATE_RET pair).
+    -- Found by checking real numbers while building DciInfoForm: 184 of
+    -- 270 medicament DCI (68%) had this set, so the old name/filter was
+    -- hiding most of the catalog from the dotation screen, not a handful
+    -- of genuinely inactive drugs.
+    projected_rupture_on TEXT
 );
 
 -- PRODUITS.DBF (commercial products). legacy_code is NOT unique on its own:

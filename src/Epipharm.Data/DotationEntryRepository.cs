@@ -5,8 +5,9 @@ using System.Data.SQLite;
 namespace Epipharm.Data
 {
     /// <summary>
-    /// "Mise a Jour des Dotations en Medicaments Usuels" — set each active
-    /// Medicaments Usuels DCI's weekly allocation for a service. This is
+    /// "Mise a Jour des Dotations en Medicaments Usuels" — set every
+    /// Medicaments Usuels DCI's weekly allocation for a service (DCI has
+    /// no real "discontinued" flag to filter on — see GetRows). This is
     /// what DeliveryEntryRepository's "Dota." column actually reads, so
     /// without this screen the dotation figures could only ever come from
     /// the original DBF import, never be set or changed for real.
@@ -41,7 +42,11 @@ namespace Epipharm.Data
                     "FROM dci d " +
                     "LEFT JOIN allocations a ON a.dci_id = d.id AND a.service_id = @service " +
                     "  AND a.drug_category = @category AND a.year = @year AND a.week = @week " +
-                    "WHERE d.drug_category = @category AND d.withdrawn_on IS NULL " +
+                    // No "is active" filter here: dci has no real
+                    // discontinued flag (see db/schema.sql's long note on
+                    // projected_rupture_on) — filtering on that field used
+                    // to hide 68% of medicament DCI from this exact screen.
+                    "WHERE d.drug_category = @category " +
                     "ORDER BY d.legacy_code;";
                 cmd.Parameters.AddWithValue("@service", serviceId);
                 cmd.Parameters.AddWithValue("@category", DrugCategory);

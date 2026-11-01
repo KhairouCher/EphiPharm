@@ -81,7 +81,7 @@ namespace Epipharm.App
             Controls.Add(_header);
 
             _categories = MenuData.BuildCategories(OpenStock, OpenReceipts, OpenReceiptEntry, OpenDeliveries,
-                OpenDeliveryEntryMedicaments, OpenDotationEntryMedicaments, ShowNotBuilt);
+                OpenDeliveryEntryMedicaments, OpenDotationEntryMedicaments, OpenDciInfo, ShowNotBuilt);
             if (account.IsAdmin)
             {
                 _categories.Add(new MenuCategory("ADMINISTRATION", new List<MenuOption>
@@ -211,6 +211,15 @@ namespace Epipharm.App
             var entryRepo = new DeliveryEntryRepository(_dbPath);
             var serviceRepo = new ServiceRepository(_dbPath);
             using (var form = new DeliveryEntryForm(entryRepo, serviceRepo, _account.Id))
+            {
+                form.ShowDialog(this);
+            }
+        }
+
+        private void OpenDciInfo()
+        {
+            var dciRepo = new DciRepository(_dbPath);
+            using (var form = new DciInfoForm(dciRepo))
             {
                 form.ShowDialog(this);
             }
