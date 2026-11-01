@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
@@ -10,20 +11,30 @@ using Epipharm.App.Theme;
 namespace Epipharm.App
 {
     /// <summary>
-    /// "Reception de Produits : Reception Fournisseur" (MENU_MAP.md section
-    /// 3) — record a new supplier delivery: pick the supplier and a date/
-    /// piece number, add one line per product/lot, save. Saving increases
-    /// the matching stock_lots row(s) — see ReceiptEntryRepository for the
-    /// legacy rule this follows ("a product can only enter stock through a
-    /// supplier receipt", MENU_MAP.md section 1) and what's this rebuild's
-    /// own choice versus confirmed from the real data.
+    /// "Reception de Produits : Réception Fournisseur" (MENU_MAP.md section
+    /// 3) — record a new supplier delivery. This is a carbon copy of the
+    /// real screen's actual interaction model, not an approximation of its
+    /// look: staff who already know the legacy app by muscle memory (type
+    /// a code, or press F5 to pick from a list; type the next field; Esc to
+    /// finish) get exactly that here — no added buttons, no side panel to
+    /// fill in before a line appears in the grid. The one and only surface
+    /// is the grid itself: C.Produit / D. Perem / Numero Lot / D. Fabri /
+    /// Qte Mut / Prix Uni are typed directly into row 1, Enter/Tab moves to
+    /// the next cell, and a fresh blank row is always ready underneath
+    /// (DataGridView's native new-row support, not a hand-built "Ajouter
+    /// Ligne" flow — an earlier version of this screen had exactly that
+    /// and it was a real, visible departure from the screenshot, not a
+    /// detail).
     ///
-    /// Field layout follows the real screenshot of this screen in
-    /// UI_SPEC.md (Code Fournisseur / Date Mouvement / No Piece, then a
-    /// grid of NLig/C.Produit/D.Perem/Numero Lot/D.Fabri/Qte Mut/Prix Uni) —
-    /// the add-a-line sub-panel below the grid is this rebuild's own
-    /// addition to make data entry possible without a WinForms designer or
-    /// an in-place editable grid, not something the screenshot shows.
+    /// There is no "Enregistrer" button either: the real screens never
+    /// showed one. Esc asks "Enregistrer ? (O/N)" when there's something
+    /// to save — the legacy app's own confirmation convention (MENU_MAP.md
+    /// "UI conventions": "Confirmation (O/N/Esc)?"), via DosConfirmForm —
+    /// not an invented control.
+    ///
+    /// Field layout (Operation / Date Mouvement / No Commande, then Code
+    /// Fournisseur / No Piece) and grid columns match the real screenshot
+    /// of this screen exactly.
     /// </summary>
     public class ReceiptEntryForm : Form
     {
@@ -35,26 +46,19 @@ namespace Epipharm.App
         private readonly DosHeaderBar _header;
         private readonly DosFooterBar _footer;
         private readonly Label _operationLabel;
-        private readonly Label _supplierLabel;
+        private readonly TextBox _supplierCodeBox;
+        private readonly Label _supplierNameLabel;
         private readonly DateTimePicker _receivedOnPicker;
         private readonly TextBox _orderNoBox;
         private readonly TextBox _documentNoBox;
 
-        private readonly Label _productLabel;
-        private readonly TextBox _lotBox;
-        private readonly DateTimePicker _expiresOnPicker;
-        private readonly DateTimePicker _manufacturedOnPicker;
-        private readonly NumericUpDown _quantityBox;
-        private readonly NumericUpDown _priceBox;
-
-        private readonly DataGridView _linesGrid;
+        private readonly DataGridView _grid;
         private readonly Label _selectedProductLabel;
         private readonly Label _totalLabel;
         private readonly Label _errorLabel;
 
         private SupplierLookup _supplier;
-        private ProductLookup _product;
-        private readonly List<ReceiptEntryLine> _lines = new List<ReceiptEntryLine>();
+        private readonly BindingList<GridRow> _rows = new BindingList<GridRow> { AllowNew = true };
 
         public ReceiptEntryForm(ReceiptEntryRepository entryRepo, SupplierRepository supplierRepo,
             ProductRepository productRepo, int accountId)
@@ -71,27 +75,14 @@ namespace Epipharm.App
             KeyPreview = true;
             BackColor = RetroTheme.MenuBackground;
 
-            // Exact subtitle text from the real screenshot, accent
-            // inconsistency and all: the legacy app itself spells
-            // "Reception" plain the first time and "Réception" accented
-            // the second, in the same line — not a transcription slip here.
             _header = new DosHeaderBar { Subtitle = "Reception de Produits : Réception Fournisseur" };
             _footer = new DosFooterBar();
-            _footer.SetHints(("F5", "Choisir Fournisseur/Produit"), ("Suppr", "Retirer la Ligne"),
-                ("F2", "Enregistrer"), ("Esc", "Sortie"));
+            _footer.SetHints(("F5", "Fournisseur/Produit"), ("Suppr", "Retirer la Ligne"), ("Esc", "Sortie"));
 
-            // Field grouping/order/labels match the real screenshot of this
-            // screen exactly: row 1 is Operation / Date Mouvement / No
-            // Commande, row 2 is Code Fournisseur (code + resolved name
-            // inline) / No Piece — not a generic 2x2 grid guessed at.
             var headerFields = new TableLayoutPanel
             {
-                Dock = DockStyle.Top,
-                Height = 90,
-                BackColor = RetroTheme.MenuBackground,
-                ColumnCount = 6,
-                RowCount = 2,
-                Padding = new Padding(16, 10, 16, 10)
+                Dock = DockStyle.Top, Height = 90, BackColor = RetroTheme.MenuBackground,
+                ColumnCount = 6, RowCount = 2, Padding = new Padding(16, 10, 16, 10)
             };
             headerFields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
             headerFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24F));
@@ -113,34 +104,35 @@ namespace Epipharm.App
             headerFields.Controls.Add(FieldLabel("Date Mouvement :"), 2, 0);
             _receivedOnPicker = new DateTimePicker
             {
-                Format = DateTimePickerFormat.Short, Dock = DockStyle.Fill, Font = RetroTheme.DosFont(10F)
+                Format = DateTimePickerFormat.Custom, CustomFormat = RetroTheme.DosDateFormat,
+                Dock = DockStyle.Fill, Font = RetroTheme.DosFont(10F)
             };
             headerFields.Controls.Add(_receivedOnPicker, 3, 0);
 
             headerFields.Controls.Add(FieldLabel("No Commande :"), 4, 0);
             // Disabled, not omitted: the real screen has this field, but
             // purchase_orders isn't implemented yet (COMMANDE.DBF was empty
-            // in the source — see scripts/migrate_to_app_schema.py), so
-            // there's nothing to link to. Keeping the box, greyed out,
-            // matches "every box" without pretending it works.
-            _orderNoBox = new TextBox
-            {
-                Dock = DockStyle.Fill, Font = RetroTheme.DosFont(10F), Enabled = false,
-                Text = string.Empty
-            };
+            // in the source).
+            _orderNoBox = new TextBox { Dock = DockStyle.Fill, Font = RetroTheme.DosFont(10F), Enabled = false };
             headerFields.Controls.Add(_orderNoBox, 5, 0);
 
             headerFields.Controls.Add(FieldLabel("Code Fournisseur :"), 0, 1);
-            var supplierRow = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = RetroTheme.MenuBackground };
-            _supplierLabel = new Label
+            var supplierRow = new TableLayoutPanel
             {
-                Text = "(non choisi)", AutoSize = false, Width = 280, Height = 26,
-                ForeColor = RetroTheme.FieldLookupValue, Font = RetroTheme.DosFont(11F), TextAlign = ContentAlignment.MiddleLeft
+                Dock = DockStyle.Fill, BackColor = RetroTheme.MenuBackground, ColumnCount = 2, RowCount = 1
             };
-            var supplierButton = SmallButton("Choisir (F5)");
-            supplierButton.Click += (s, e) => PickSupplier();
-            supplierRow.Controls.Add(_supplierLabel);
-            supplierRow.Controls.Add(supplierButton);
+            supplierRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 70));
+            supplierRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _supplierCodeBox = new TextBox { Dock = DockStyle.Fill, Font = RetroTheme.DosFont(11F) };
+            _supplierCodeBox.KeyDown += SupplierCodeBox_KeyDown;
+            _supplierCodeBox.Leave += (s, e) => ResolveTypedSupplier();
+            _supplierNameLabel = new Label
+            {
+                Dock = DockStyle.Fill, ForeColor = RetroTheme.FieldLookupValue, Font = RetroTheme.DosFont(11F),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            supplierRow.Controls.Add(_supplierCodeBox, 0, 0);
+            supplierRow.Controls.Add(_supplierNameLabel, 1, 0);
             headerFields.SetColumnSpan(supplierRow, 3);
             headerFields.Controls.Add(supplierRow, 1, 1);
 
@@ -148,15 +140,8 @@ namespace Epipharm.App
             _documentNoBox = new TextBox { Dock = DockStyle.Fill, Font = RetroTheme.DosFont(11F) };
             headerFields.Controls.Add(_documentNoBox, 5, 1);
 
-            var lineEntry = BuildLineEntryPanel(out _productLabel, out _lotBox, out _expiresOnPicker,
-                out _manufacturedOnPicker, out _quantityBox, out _priceBox);
+            _grid = BuildGrid();
 
-            _linesGrid = BuildLinesGrid();
-
-            // The real screenshot shows a "PRODUIT :" line directly under
-            // the grid — the resolved name for the currently-selected
-            // line, since the grid's own C.Produit column only shows the
-            // code (see BuildLinesGrid / UpdateSelectedProductLabel).
             var productBar = new TableLayoutPanel
             {
                 Dock = DockStyle.Bottom, Height = 26, BackColor = RetroTheme.MenuBackground,
@@ -171,14 +156,13 @@ namespace Epipharm.App
             };
             productBar.Controls.Add(_selectedProductLabel, 1, 0);
 
-            var bottomBar = new TableLayoutPanel
+            var totalBar = new TableLayoutPanel
             {
-                Dock = DockStyle.Bottom, Height = 64, BackColor = RetroTheme.MenuBackground,
-                ColumnCount = 3, RowCount = 1, Padding = new Padding(16, 10, 16, 10)
+                Dock = DockStyle.Bottom, Height = 40, BackColor = RetroTheme.MenuBackground,
+                ColumnCount = 2, RowCount = 1, Padding = new Padding(16, 6, 16, 6)
             };
-            bottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
-            bottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
-            bottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20F));
+            totalBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70F));
+            totalBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
             _errorLabel = new Label
             {
                 Dock = DockStyle.Fill, ForeColor = Dos16.LightRed, Font = RetroTheme.DosFont(10F, FontStyle.Bold)
@@ -188,191 +172,209 @@ namespace Epipharm.App
                 Dock = DockStyle.Fill, ForeColor = RetroTheme.FieldValue, Font = RetroTheme.DosFont(12F, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleRight, Text = "Total : 0,00 DZD"
             };
-            var saveButton = SmallButton("Enregistrer (F2)");
-            saveButton.Dock = DockStyle.Fill;
-            saveButton.Click += (s, e) => AttemptSave();
-            bottomBar.Controls.Add(_errorLabel, 0, 0);
-            bottomBar.Controls.Add(_totalLabel, 1, 0);
-            bottomBar.Controls.Add(saveButton, 2, 0);
+            totalBar.Controls.Add(_errorLabel, 0, 0);
+            totalBar.Controls.Add(_totalLabel, 1, 0);
 
-            // Fill (_linesGrid) first, then the other Dock-anchored bands,
-            // nearest-to-farthest from the fill area — same ordering
-            // convention used throughout Epipharm.App.
-            Controls.Add(_linesGrid);
+            // Fill (_grid) first, then the other Dock-anchored bands,
+            // nearest-to-farthest from the fill area.
+            Controls.Add(_grid);
             Controls.Add(productBar);
-            Controls.Add(bottomBar);
-            Controls.Add(lineEntry);
+            Controls.Add(totalBar);
             Controls.Add(headerFields);
             Controls.Add(_footer);
             Controls.Add(_header);
         }
 
-        private Panel BuildLineEntryPanel(out Label productLabel, out TextBox lotBox,
-            out DateTimePicker expiresOnPicker, out DateTimePicker manufacturedOnPicker,
-            out NumericUpDown quantityBox, out NumericUpDown priceBox)
+        /// <summary>One grid row's raw typed text — parsed/resolved lazily
+        /// (on cell commit for the product code, at save time for
+        /// everything else), matching how a DOS form only validates a
+        /// field once you leave it, not keystroke-by-keystroke.</summary>
+        private class GridRow
         {
-            var panel = new TableLayoutPanel
-            {
-                Dock = DockStyle.Top, Height = 92, BackColor = RetroTheme.FieldActiveBack,
-                ColumnCount = 7, RowCount = 2, Padding = new Padding(16, 8, 16, 8)
-            };
-            for (var i = 0; i < 6; i++) panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 14F));
-            panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16F));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 18));
-            panel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            public string ProductCode { get; set; } = string.Empty;
+            public string ProductLabel { get; set; } = string.Empty;
+            public int? ProductId { get; set; }
+            public string ExpiresOnText { get; set; } = string.Empty;
+            public string LotNumber { get; set; } = string.Empty;
+            public string ManufacturedOnText { get; set; } = string.Empty;
+            public string QuantityText { get; set; } = string.Empty;
+            public string PriceText { get; set; } = string.Empty;
 
-            Label Caption(string text) => new Label
-            {
-                Text = text, Dock = DockStyle.Fill, ForeColor = Dos16.White, Font = RetroTheme.DosFont(9F)
-            };
-
-            panel.Controls.Add(Caption("Produit"), 0, 0);
-            panel.Controls.Add(Caption("Lot"), 1, 0);
-            panel.Controls.Add(Caption("Peremption"), 2, 0);
-            panel.Controls.Add(Caption("Fabrication"), 3, 0);
-            panel.Controls.Add(Caption("Qte"), 4, 0);
-            panel.Controls.Add(Caption("Prix Unit."), 5, 0);
-
-            var productRow = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = RetroTheme.FieldActiveBack };
-            productLabel = new Label
-            {
-                Text = "(non choisi)", AutoSize = false, Width = 140, Height = 24,
-                ForeColor = Dos16.White, Font = RetroTheme.DosFont(10F)
-            };
-            var productButton = SmallButton("F5");
-            productButton.Click += (s, e) => PickProduct();
-            productRow.Controls.Add(productLabel);
-            productRow.Controls.Add(productButton);
-            panel.Controls.Add(productRow, 0, 1);
-
-            lotBox = new TextBox { Dock = DockStyle.Fill, Font = RetroTheme.DosFont(10F) };
-            panel.Controls.Add(lotBox, 1, 1);
-
-            expiresOnPicker = new DateTimePicker
-            {
-                Format = DateTimePickerFormat.Short, ShowCheckBox = true, Checked = false,
-                Dock = DockStyle.Fill, Font = RetroTheme.DosFont(9F)
-            };
-            panel.Controls.Add(expiresOnPicker, 2, 1);
-
-            manufacturedOnPicker = new DateTimePicker
-            {
-                Format = DateTimePickerFormat.Short, ShowCheckBox = true, Checked = false,
-                Dock = DockStyle.Fill, Font = RetroTheme.DosFont(9F)
-            };
-            panel.Controls.Add(manufacturedOnPicker, 3, 1);
-
-            quantityBox = new NumericUpDown
-            {
-                Minimum = 0, Maximum = 1000000, Dock = DockStyle.Fill, Font = RetroTheme.DosFont(10F)
-            };
-            panel.Controls.Add(quantityBox, 4, 1);
-
-            priceBox = new NumericUpDown
-            {
-                Minimum = 0, Maximum = 100000000, DecimalPlaces = 2, Increment = 0.01m,
-                Dock = DockStyle.Fill, Font = RetroTheme.DosFont(10F)
-            };
-            panel.Controls.Add(priceBox, 5, 1);
-
-            var addButton = SmallButton("Ajouter Ligne");
-            addButton.Dock = DockStyle.Fill;
-            addButton.Click += (s, e) => AddLine();
-            panel.Controls.Add(addButton, 6, 1);
-
-            return panel;
+            public bool IsBlank => string.IsNullOrWhiteSpace(ProductCode);
         }
 
-        /// <summary>
-        /// Columns match the real screenshot exactly — name, order, and
-        /// abbreviation: NLig | C.Produit | D. Perem | Numero Lot |
-        /// D. Fabri | Qte Mut | Prix Uni. C.Produit shows the legacy
-        /// product *code*, like the real screen does, not a resolved name
-        /// — the resolved name for the selected line is shown separately
-        /// below the grid as "Produit :", matching the real screen's own
-        /// footer convention (so the data is still there, just where the
-        /// legacy screen actually puts it).
-        /// </summary>
-        private DataGridView BuildLinesGrid()
+        private DataGridView BuildGrid()
         {
             var grid = new DataGridView
             {
-                Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false, AllowUserToResizeRows = false,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect, AutoGenerateColumns = false,
-                RowHeadersVisible = false, BorderStyle = BorderStyle.FixedSingle,
+                Dock = DockStyle.Fill, AllowUserToAddRows = true, AllowUserToResizeRows = false,
+                AllowUserToDeleteRows = true, SelectionMode = DataGridViewSelectionMode.CellSelect,
+                AutoGenerateColumns = false, RowHeadersVisible = true, RowHeadersWidth = 40,
+                BorderStyle = BorderStyle.FixedSingle,
                 BackgroundColor = RetroTheme.FormGridBackground, GridColor = RetroTheme.BoxBorder,
+                DataSource = _rows,
                 DefaultCellStyle =
                 {
                     BackColor = RetroTheme.FormGridBackground, ForeColor = RetroTheme.FormGridText,
-                    // 11F, not 10F: matches every other grid in the app
-                    // (StockListForm, ReceiptsListForm, DeliveriesListForm)
-                    // — also fixes a real rendering glitch found by actually
-                    // looking at a screenshot: the bundled bitmap font drew
-                    // "NLig" as what reads like "MLig" at 10F bold, since
-                    // that's not one of the pixel-grid sizes the font was
-                    // designed for; 11F is already proven to render cleanly
-                    // elsewhere in this app.
-                    Font = RetroTheme.DosFont(11F), SelectionBackColor = RetroTheme.MenuItemSelectedBack,
-                    SelectionForeColor = RetroTheme.MenuItemSelectedText
+                    Font = RetroTheme.DosFont(11F), SelectionBackColor = RetroTheme.FieldActiveBack,
+                    SelectionForeColor = RetroTheme.FieldActiveText
                 },
                 ColumnHeadersDefaultCellStyle =
                 {
                     BackColor = RetroTheme.FormGridHeaderBack, ForeColor = RetroTheme.FormGridHeaderText,
-                    // Bold requested for consistency with every other grid
-                    // header in the app (DosFont silently ignores it for
-                    // the bundled font — see DosFont's doc comment).
                     Font = RetroTheme.DosFont(11F, FontStyle.Bold)
+                },
+                RowHeadersDefaultCellStyle =
+                {
+                    BackColor = RetroTheme.FormGridHeaderBack, ForeColor = RetroTheme.FormGridHeaderText,
+                    Font = RetroTheme.DosFont(10F)
                 },
                 EnableHeadersVisualStyles = false
             };
-            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "nlig", HeaderText = "NLig", DataPropertyName = "LineNo", FillWeight = 8,
-                DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleCenter } });
+            // NLig: the real screen's leftmost column is just the 1-based
+            // line number — that's exactly what a DataGridView row header
+            // is for, not a bound data column (nothing to type there).
+            grid.RowPostPaint += (s, e) =>
+            {
+                var text = (e.RowIndex + 1).ToString(CultureInfo.InvariantCulture);
+                var bounds = new Rectangle(e.RowBounds.Left, e.RowBounds.Top, grid.RowHeadersWidth, e.RowBounds.Height);
+                // DataGridView already painted its own current-row glyph
+                // (a small triangle/pencil) into this rectangle before
+                // RowPostPaint fires — paint over it first, or the glyph
+                // shows through behind the line number (caught by actually
+                // looking at a screenshot, not obvious from the code).
+                using (var backBrush = new SolidBrush(grid.RowHeadersDefaultCellStyle.BackColor))
+                {
+                    e.Graphics.FillRectangle(backBrush, bounds);
+                }
+                TextRenderer.DrawText(e.Graphics, text, grid.RowHeadersDefaultCellStyle.Font, bounds,
+                    grid.RowHeadersDefaultCellStyle.ForeColor,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            };
+
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "cproduit", HeaderText = "C.Produit", DataPropertyName = "ProductCode", FillWeight = 16 });
-            grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "perem", HeaderText = "D. Perem", DataPropertyName = "ExpiresOn", FillWeight = 14,
-                DefaultCellStyle = { Format = "dd/MM/yy" }
-            });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "perem", HeaderText = "D. Perem", DataPropertyName = "ExpiresOnText", FillWeight = 14 });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "lot", HeaderText = "Numero Lot", DataPropertyName = "LotNumber", FillWeight = 18 });
+            grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "fabri", HeaderText = "D. Fabri", DataPropertyName = "ManufacturedOnText", FillWeight = 14 });
             grid.Columns.Add(new DataGridViewTextBoxColumn
             {
-                Name = "fabri", HeaderText = "D. Fabri", DataPropertyName = "ManufacturedOn", FillWeight = 14,
-                DefaultCellStyle = { Format = "dd/MM/yy" }
-            });
-            grid.Columns.Add(new DataGridViewTextBoxColumn
-            {
-                Name = "qte", HeaderText = "Qte Mut", DataPropertyName = "Quantity", FillWeight = 14,
+                Name = "qte", HeaderText = "Qte Mut", DataPropertyName = "QuantityText", FillWeight = 14,
                 DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleRight }
             });
             grid.Columns.Add(new DataGridViewTextBoxColumn
             {
-                Name = "prix", HeaderText = "Prix Uni", DataPropertyName = "UnitPriceDisplay", FillWeight = 16,
-                DefaultCellStyle = { Format = "N2", Alignment = DataGridViewContentAlignment.MiddleRight }
+                Name = "prix", HeaderText = "Prix Uni", DataPropertyName = "PriceText", FillWeight = 16,
+                DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleRight }
             });
-            grid.KeyDown += (s, e) =>
-            {
-                // The grid is bound to an anonymous projection (for display
-                // formatting — see RefreshLines), not ReceiptEntryLine
-                // itself, so the real line to remove comes from the row's
-                // Tag (set in RefreshLines), not DataBoundItem.
-                if (e.KeyCode == Keys.Delete && grid.CurrentRow?.Tag is ReceiptEntryLine line)
-                {
-                    _lines.Remove(line);
-                    RefreshLines();
-                }
-            };
-            grid.SelectionChanged += (s, e) => UpdateSelectedProductLabel();
+
+            grid.CellEndEdit += Grid_CellEndEdit;
+            grid.CellEnter += (s, e) => UpdateSelectedProductLabel(e.RowIndex);
+            grid.KeyDown += Grid_KeyDown;
+            grid.DataError += (s, e) => { e.ThrowException = false; };
             return grid;
         }
 
-        /// <summary>The "PRODUIT :" line under the grid on the real
-        /// screenshot — the resolved name for whichever line is currently
-        /// selected, since the grid itself only shows the product code.</summary>
-        private void UpdateSelectedProductLabel()
+        private void Grid_CellEndEdit(object sender, DataGridViewCellEventArgs e)
         {
-            _selectedProductLabel.Text = _linesGrid.CurrentRow?.Tag is ReceiptEntryLine line
-                ? line.ProductLabel
+            if (_grid.Columns[e.ColumnIndex].Name != "cproduit")
+            {
+                RefreshTotal();
+                return;
+            }
+            ResolveTypedProduct(e.RowIndex);
+            RefreshTotal();
+        }
+
+        private void Grid_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Delete && _grid.CurrentCell != null && !_grid.IsCurrentCellInEditMode)
+            {
+                var deleteRowIndex = _grid.CurrentCell.RowIndex;
+                if (deleteRowIndex >= 0 && deleteRowIndex < _rows.Count)
+                {
+                    _rows.RemoveAt(deleteRowIndex);
+                    RefreshTotal();
+                }
+                e.Handled = true;
+                return;
+            }
+
+            if (e.KeyCode != Keys.F5 || _grid.CurrentCell == null) return;
+            if (_grid.Columns[_grid.CurrentCell.ColumnIndex].Name != "cproduit") return;
+
+            var rowIndex = _grid.CurrentCell.RowIndex;
+            using (var picker = new PickerForm<ProductLookup>(
+                "Liste Produits/Code ou Alpha", "Rechercher (nom du produit, DCI ou code) :",
+                q => _productRepo.Search(q), p => $"{p.LegacyCode}  {p.Label}"))
+            {
+                if (picker.ShowDialog(this) != DialogResult.OK) return;
+
+                var chosen = picker.Selected;
+                if (rowIndex >= _rows.Count)
+                {
+                    // Picking via F5 on the always-present blank "new row"
+                    // adds it to the real list first, same as typing would.
+                    _rows.Add(new GridRow());
+                    rowIndex = _rows.Count - 1;
+                }
+                var row = _rows[rowIndex];
+                row.ProductCode = chosen.Code;
+                row.ProductId = chosen.Id;
+                row.ProductLabel = chosen.Label;
+                _rows.ResetItem(rowIndex);
+                UpdateSelectedProductLabel(rowIndex);
+            }
+            e.Handled = true;
+        }
+
+        private void ResolveTypedProduct(int rowIndex)
+        {
+            if (rowIndex < 0 || rowIndex >= _rows.Count) return;
+            var row = _rows[rowIndex];
+            if (string.IsNullOrWhiteSpace(row.ProductCode))
+            {
+                row.ProductId = null;
+                row.ProductLabel = string.Empty;
+                return;
+            }
+
+            var found = _productRepo.FindByCode(row.ProductCode.Trim());
+            if (found == null)
+            {
+                row.ProductId = null;
+                row.ProductLabel = string.Empty;
+                _errorLabel.Text = "Produit Inexistant";
+            }
+            else
+            {
+                row.ProductId = found.Id;
+                row.ProductCode = found.Code;
+                row.ProductLabel = found.Label;
+                _errorLabel.Text = string.Empty;
+            }
+            _rows.ResetItem(rowIndex);
+            UpdateSelectedProductLabel(rowIndex);
+        }
+
+        private void UpdateSelectedProductLabel(int rowIndex)
+        {
+            _selectedProductLabel.Text = rowIndex >= 0 && rowIndex < _rows.Count
+                ? _rows[rowIndex].ProductLabel
                 : string.Empty;
+        }
+
+        private void RefreshTotal()
+        {
+            decimal total = 0;
+            foreach (var row in _rows)
+            {
+                if (int.TryParse(row.QuantityText, out var qty) &&
+                    decimal.TryParse(row.PriceText, NumberStyles.Number, CultureInfo.InvariantCulture, out var price))
+                {
+                    total += qty * price;
+                }
+            }
+            _totalLabel.Text = $"Total : {total:N2} DZD";
         }
 
         private static Label FieldLabel(string text) => new Label
@@ -381,23 +383,25 @@ namespace Epipharm.App
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        private static Button SmallButton(string text) => new Button
-        {
-            Text = text, AutoSize = true, Font = RetroTheme.DosFont(9F),
-            BackColor = RetroTheme.BoxBorder, ForeColor = RetroTheme.MenuBackground, Padding = new Padding(4)
-        };
-
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
-            PickSupplier();
+            _supplierCodeBox.Focus();
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            if (keyData == Keys.Escape) { Close(); return true; }
-            if (keyData == Keys.F2) { AttemptSave(); return true; }
+            if (keyData == Keys.Escape) { AttemptCloseWithConfirm(); return true; }
             return base.ProcessCmdKey(ref msg, keyData);
+        }
+
+        private void SupplierCodeBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.F5)
+            {
+                PickSupplier();
+                e.Handled = true;
+            }
         }
 
         private void PickSupplier()
@@ -408,119 +412,149 @@ namespace Epipharm.App
             {
                 if (picker.ShowDialog(this) == DialogResult.OK)
                 {
-                    _supplier = picker.Selected;
-                    // "<code>  <sigle>", matching the real screenshot
-                    // exactly: "21312  S.A.R.L FARABI M.S" — the typed
-                    // code, two spaces, then FOURNIS.SIGLE (confirmed
-                    // against the real data; FOURNIS.LIBELLE for that row
-                    // is the longer "SARL FARABI SETIF M.S", not shown here).
-                    _supplierLabel.Text = $"{_supplierRepo.LegacyFiveDigitCode(_supplier.LegacyCode)}  {_supplier.Sigle}";
+                    SetSupplier(picker.Selected);
                 }
             }
         }
 
-        private void PickProduct()
+        private void ResolveTypedSupplier()
         {
-            using (var picker = new PickerForm<ProductLookup>(
-                "Liste Produits/Code ou Alpha", "Rechercher (nom du produit, DCI ou code) :",
-                q => _productRepo.Search(q), p => $"{p.LegacyCode}  {p.Label}"))
+            var typed = _supplierCodeBox.Text.Trim();
+            if (string.IsNullOrEmpty(typed))
             {
-                if (picker.ShowDialog(this) == DialogResult.OK)
+                _supplier = null;
+                _supplierNameLabel.Text = string.Empty;
+                return;
+            }
+            var found = _supplierRepo.FindByFiveDigitCode(typed);
+            if (found == null)
+            {
+                _supplier = null;
+                _supplierNameLabel.Text = string.Empty;
+                _errorLabel.Text = "Fournisseur Inexistant";
+            }
+            else
+            {
+                SetSupplier(found);
+            }
+        }
+
+        private void SetSupplier(SupplierLookup supplier)
+        {
+            _supplier = supplier;
+            _supplierCodeBox.Text = _supplierRepo.LegacyFiveDigitCode(supplier.LegacyCode);
+            // Sigle alone, not Label ("sigle - name"): the real screenshot
+            // shows only the sigle after the code (FOURNIS.SIGLE,
+            // confirmed against the real data).
+            _supplierNameLabel.Text = supplier.Sigle;
+            _errorLabel.Text = string.Empty;
+        }
+
+        private void AttemptCloseWithConfirm()
+        {
+            var hasContent = _rows.Any(r => !r.IsBlank) || _supplier != null ||
+                              !string.IsNullOrWhiteSpace(_documentNoBox.Text);
+            if (!hasContent)
+            {
+                Close();
+                return;
+            }
+
+            if (!DosConfirmForm.Ask(this, "Enregistrer"))
+            {
+                Close();
+                return;
+            }
+
+            if (TrySave())
+            {
+                Close();
+            }
+        }
+
+        private bool TrySave()
+        {
+            _errorLabel.Text = string.Empty;
+            var lines = new List<ReceiptEntryLine>();
+
+            foreach (var row in _rows)
+            {
+                if (row.IsBlank) continue;
+
+                if (row.ProductId == null)
                 {
-                    _product = picker.Selected;
-                    _productLabel.Text = _product.Label;
+                    _errorLabel.Text = "Produit Inexistant";
+                    return false;
                 }
-            }
-        }
+                if (string.IsNullOrWhiteSpace(row.LotNumber))
+                {
+                    _errorLabel.Text = "Numero de Lot Obligatoire";
+                    return false;
+                }
+                if (!int.TryParse(row.QuantityText, out var qty) || qty <= 0)
+                {
+                    _errorLabel.Text = "La Quantite doit etre Positive";
+                    return false;
+                }
+                decimal price = 0;
+                if (!string.IsNullOrWhiteSpace(row.PriceText) &&
+                    !decimal.TryParse(row.PriceText, NumberStyles.Number, CultureInfo.InvariantCulture, out price))
+                {
+                    _errorLabel.Text = "Prix Invalide";
+                    return false;
+                }
+                if (!TryParseDosDate(row.ExpiresOnText, out var expiresOn))
+                {
+                    _errorLabel.Text = "Date de Peremption Invalide";
+                    return false;
+                }
+                if (!TryParseDosDate(row.ManufacturedOnText, out var manufacturedOn))
+                {
+                    _errorLabel.Text = "Date de Fabrication Invalide";
+                    return false;
+                }
 
-        private void AddLine()
-        {
-            _errorLabel.Text = string.Empty;
-            if (_product == null)
-            {
-                _errorLabel.Text = "Produit Obligatoire";
-                return;
-            }
-            if (string.IsNullOrWhiteSpace(_lotBox.Text))
-            {
-                _errorLabel.Text = "Numero de Lot Obligatoire";
-                return;
-            }
-            if (_quantityBox.Value <= 0)
-            {
-                _errorLabel.Text = "La Quantite doit etre Positive";
-                return;
-            }
-            if (_lines.Any(l => l.ProductId == _product.Id && l.LotNumber == _lotBox.Text.Trim()))
-            {
-                _errorLabel.Text = "Produit Existe Deja Mouvemente (meme lot, cette reception)";
-                return;
+                lines.Add(new ReceiptEntryLine
+                {
+                    ProductId = row.ProductId.Value,
+                    ProductCode = row.ProductCode,
+                    ProductLabel = row.ProductLabel,
+                    LotNumber = row.LotNumber.Trim(),
+                    ExpiresOn = expiresOn,
+                    ManufacturedOn = manufacturedOn,
+                    Quantity = qty,
+                    UnitPriceCentimes = (int)(price * 100m)
+                });
             }
 
-            _lines.Add(new ReceiptEntryLine
-            {
-                ProductId = _product.Id,
-                ProductCode = _product.LegacyCode,
-                ProductLabel = _product.Label,
-                LotNumber = _lotBox.Text.Trim(),
-                ExpiresOn = _expiresOnPicker.Checked ? _expiresOnPicker.Value.Date : (DateTime?)null,
-                ManufacturedOn = _manufacturedOnPicker.Checked ? _manufacturedOnPicker.Value.Date : (DateTime?)null,
-                Quantity = (int)_quantityBox.Value,
-                UnitPriceCentimes = (int)(_priceBox.Value * 100m)
-            });
-
-            _product = null;
-            _productLabel.Text = "(non choisi)";
-            _lotBox.Clear();
-            _expiresOnPicker.Checked = false;
-            _manufacturedOnPicker.Checked = false;
-            _quantityBox.Value = 0;
-            _priceBox.Value = 0;
-            RefreshLines();
-        }
-
-        private void RefreshLines()
-        {
-            _linesGrid.DataSource = null;
-            _linesGrid.DataSource = _lines.Select((l, i) => new
-            {
-                LineNo = i + 1,
-                l.ProductCode,
-                l.ExpiresOn,
-                l.LotNumber,
-                l.ManufacturedOn,
-                l.Quantity,
-                UnitPriceDisplay = l.UnitPriceCentimes / 100m
-            }).ToList();
-            // Keep the real ReceiptEntryLine objects reachable for Delete-key
-            // removal and the "Produit :" line (see UpdateSelectedProductLabel)
-            // — the grid above is bound to an anonymous projection for
-            // display formatting, so re-bind the row tag separately.
-            for (var i = 0; i < _linesGrid.Rows.Count && i < _lines.Count; i++)
-            {
-                _linesGrid.Rows[i].Tag = _lines[i];
-            }
-            var total = _lines.Sum(l => l.LineTotal);
-            _totalLabel.Text = $"Total : {total:N2} DZD";
-            UpdateSelectedProductLabel();
-        }
-
-        private void AttemptSave()
-        {
-            _errorLabel.Text = string.Empty;
             try
             {
                 var receiptId = _entryRepo.Save(_supplier, _documentNoBox.Text, _receivedOnPicker.Value.Date,
-                    _lines, _accountId);
-                MessageBox.Show(this, $"Reception enregistree (No {receiptId}).", "EPIPHARM",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-                DialogResult = DialogResult.OK;
-                Close();
+                    lines, _accountId);
+                _errorLabel.ForeColor = RetroTheme.FieldValue;
+                _errorLabel.Text = $"Reception enregistree (No {receiptId}).";
+                return true;
             }
             catch (InvalidOperationException ex)
             {
                 _errorLabel.Text = ex.Message;
+                return false;
             }
+        }
+
+        /// <summary>Parses the legacy DD/MM/YY date format (see
+        /// RetroTheme.DosDateFormat); blank is valid (no date entered).</summary>
+        private static bool TryParseDosDate(string text, out DateTime? result)
+        {
+            result = null;
+            if (string.IsNullOrWhiteSpace(text)) return true;
+            if (!DateTime.TryParseExact(text.Trim(), new[] { "dd/MM/yy", "dd/MM/yyyy", "d/M/yy", "d/M/yyyy" },
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            {
+                return false;
+            }
+            result = parsed;
+            return true;
         }
     }
 }

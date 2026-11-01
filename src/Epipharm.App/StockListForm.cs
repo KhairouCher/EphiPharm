@@ -151,7 +151,7 @@ namespace Epipharm.App
             grid.Columns.Add(new DataGridViewTextBoxColumn
             {
                 Name = "expiry", HeaderText = "Peremption", DataPropertyName = "ExpiresOn", FillWeight = 12,
-                DefaultCellStyle = { Format = "dd/MM/yyyy", Alignment = DataGridViewContentAlignment.MiddleCenter }
+                DefaultCellStyle = { Format = RetroTheme.DosDateFormat, Alignment = DataGridViewContentAlignment.MiddleCenter }
             });
             grid.Columns.Add(new DataGridViewTextBoxColumn
             {

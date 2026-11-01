@@ -64,5 +64,40 @@ namespace Epipharm.Data
 
             return results;
         }
+
+        /// <summary>Resolves a typed service code directly, for typing it
+        /// into "Code Service" instead of using the F5 picker — same
+        /// "type a code, or press F5" convention as
+        /// ProductRepository.FindByCode / SupplierRepository.FindByFiveDigitCode.</summary>
+        public ServiceLookup FindByCode(string code)
+        {
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                return null;
+            }
+
+            using (var conn = Open())
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText =
+                    "SELECT id, sigle, name FROM services WHERE legacy_center_code = @center AND sigle = @code LIMIT 1;";
+                cmd.Parameters.AddWithValue("@center", DeliveryEstablishmentCode);
+                cmd.Parameters.AddWithValue("@code", code.Trim());
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    if (!reader.Read())
+                    {
+                        return null;
+                    }
+                    return new ServiceLookup
+                    {
+                        Id = Convert.ToInt32(reader["id"]),
+                        Code = reader["sigle"] as string,
+                        Name = reader["name"] as string
+                    };
+                }
+            }
+        }
     }
 }

@@ -75,6 +75,16 @@ namespace Epipharm.App.Theme
         public static readonly Color FormGridHeaderText = Dos16.White;
         public static readonly Color SecondaryLabel = Dos16.LightMagenta;
 
+        /// <summary>
+        /// DD/MM/YY, matching every date shown in every real screenshot
+        /// (e.g. "13/03/26") — never the Windows machine's own locale.
+        /// DateTimePicker's Format=Short silently uses whatever short-date
+        /// format the OS is set to (found rendering as US-style
+        /// "10/31/2026" on a real build); every DateTimePicker in the app
+        /// must use Format=Custom with this string instead, not Short.
+        /// </summary>
+        public const string DosDateFormat = "dd/MM/yy";
+
         private static Font _dosFont;
         private static readonly PrivateFontCollection BundledFonts = LoadBundledFonts();
 

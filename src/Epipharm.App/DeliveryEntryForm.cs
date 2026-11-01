@@ -25,6 +25,13 @@ namespace Epipharm.App
     /// match the real screenshot of this screen exactly — see
     /// DeliveryAllocationRow for what each column means and which parts
     /// are confirmed versus this rebuild's own reasonable choice.
+    ///
+    /// No "Choisir" button and no "Enregistrer" button: Code Service is
+    /// typed directly (F5 to pick from a list instead), the same "type a
+    /// code, or press F5" convention as ReceiptEntryForm, and Esc asks
+    /// "Enregistrer ? (O/N)" via DosConfirmForm — the legacy app's own
+    /// confirmation convention — instead of a button neither real screen
+    /// ever showed.
     /// </summary>
     public class DeliveryEntryForm : Form
     {
@@ -35,7 +42,8 @@ namespace Epipharm.App
         private readonly DosHeaderBar _header;
         private readonly DosFooterBar _footer;
         private readonly Label _operationLabel;
-        private readonly Label _serviceLabel;
+        private readonly TextBox _serviceCodeBox;
+        private readonly Label _serviceNameLabel;
         private readonly DateTimePicker _operationDatePicker;
         private readonly TextBox _documentNoBox;
         private readonly Label _weekLabel;
@@ -63,7 +71,7 @@ namespace Epipharm.App
 
             _header = new DosHeaderBar { Subtitle = "Livraison sur Bon de Commande (Medicaments)" };
             _footer = new DosFooterBar();
-            _footer.SetHints(("F5", "Choisir Service"), ("F2", "Enregistrer"), ("Esc", "Sortie"));
+            _footer.SetHints(("F5", "Choisir Service"), ("Esc", "Sortie"));
 
             // Header field grouping/order matches the real screenshot
             // exactly: row 1 is Code Service / Date Operation / No de
@@ -83,22 +91,29 @@ namespace Epipharm.App
             for (var i = 0; i < 3; i++) headerFields.RowStyles.Add(new RowStyle(SizeType.Percent, 100F / 3));
 
             headerFields.Controls.Add(FieldLabel("Code Service :"), 0, 0);
-            var serviceRow = new FlowLayoutPanel { Dock = DockStyle.Fill, BackColor = RetroTheme.MenuBackground };
-            _serviceLabel = new Label
+            var serviceRow = new TableLayoutPanel
             {
-                Text = "(non choisi)", AutoSize = false, Width = 260, Height = 26,
-                ForeColor = RetroTheme.FieldLookupValue, Font = RetroTheme.DosFont(11F), TextAlign = ContentAlignment.MiddleLeft
+                Dock = DockStyle.Fill, BackColor = RetroTheme.MenuBackground, ColumnCount = 2, RowCount = 1
             };
-            var serviceButton = SmallButton("Choisir (F5)");
-            serviceButton.Click += (s, e) => PickService();
-            serviceRow.Controls.Add(_serviceLabel);
-            serviceRow.Controls.Add(serviceButton);
+            serviceRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 50));
+            serviceRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            _serviceCodeBox = new TextBox { Dock = DockStyle.Fill, Font = RetroTheme.DosFont(11F) };
+            _serviceCodeBox.KeyDown += (s, e) => { if (e.KeyCode == Keys.F5) { PickService(); e.Handled = true; } };
+            _serviceCodeBox.Leave += (s, e) => ResolveTypedService();
+            _serviceNameLabel = new Label
+            {
+                Dock = DockStyle.Fill, ForeColor = RetroTheme.FieldLookupValue, Font = RetroTheme.DosFont(11F),
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            serviceRow.Controls.Add(_serviceCodeBox, 0, 0);
+            serviceRow.Controls.Add(_serviceNameLabel, 1, 0);
             headerFields.Controls.Add(serviceRow, 1, 0);
 
             headerFields.Controls.Add(FieldLabel("Date Operation :"), 2, 0);
             _operationDatePicker = new DateTimePicker
             {
-                Format = DateTimePickerFormat.Short, Dock = DockStyle.Fill, Font = RetroTheme.DosFont(10F)
+                Format = DateTimePickerFormat.Custom, CustomFormat = RetroTheme.DosDateFormat,
+                Dock = DockStyle.Fill, Font = RetroTheme.DosFont(10F)
             };
             _operationDatePicker.ValueChanged += (s, e) => RefreshComputedFields();
             headerFields.Controls.Add(_operationDatePicker, 3, 0);
@@ -133,12 +148,11 @@ namespace Epipharm.App
 
             var bottomBar = new TableLayoutPanel
             {
-                Dock = DockStyle.Bottom, Height = 64, BackColor = RetroTheme.MenuBackground,
-                ColumnCount = 3, RowCount = 1, Padding = new Padding(16, 10, 16, 10)
+                Dock = DockStyle.Bottom, Height = 40, BackColor = RetroTheme.MenuBackground,
+                ColumnCount = 2, RowCount = 1, Padding = new Padding(16, 6, 16, 6)
             };
-            bottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50F));
+            bottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70F));
             bottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
-            bottomBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20F));
             _errorLabel = new Label
             {
                 Dock = DockStyle.Fill, ForeColor = Dos16.LightRed, Font = RetroTheme.DosFont(10F, FontStyle.Bold)
@@ -148,12 +162,8 @@ namespace Epipharm.App
                 Dock = DockStyle.Fill, ForeColor = RetroTheme.FieldValue, Font = RetroTheme.DosFont(12F, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleRight, Text = "Total : 0,00 DZD"
             };
-            var saveButton = SmallButton("Enregistrer (F2)");
-            saveButton.Dock = DockStyle.Fill;
-            saveButton.Click += (s, e) => AttemptSave();
             bottomBar.Controls.Add(_errorLabel, 0, 0);
             bottomBar.Controls.Add(_totalLabel, 1, 0);
-            bottomBar.Controls.Add(saveButton, 2, 0);
 
             Controls.Add(_grid);
             Controls.Add(bottomBar);
@@ -248,22 +258,15 @@ namespace Epipharm.App
             TextAlign = ContentAlignment.MiddleLeft
         };
 
-        private static Button SmallButton(string text) => new Button
-        {
-            Text = text, AutoSize = true, Font = RetroTheme.DosFont(9F),
-            BackColor = RetroTheme.BoxBorder, ForeColor = RetroTheme.MenuBackground, Padding = new Padding(4)
-        };
-
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
-            PickService();
+            _serviceCodeBox.Focus();
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
-            if (keyData == Keys.Escape) { Close(); return true; }
-            if (keyData == Keys.F2) { AttemptSave(); return true; }
+            if (keyData == Keys.Escape) { AttemptCloseWithConfirm(); return true; }
             return base.ProcessCmdKey(ref msg, keyData);
         }
 
@@ -286,11 +289,40 @@ namespace Epipharm.App
             {
                 if (picker.ShowDialog(this) == DialogResult.OK)
                 {
-                    _service = picker.Selected;
-                    _serviceLabel.Text = $"{_service.Code}  {_service.Name}";
-                    LoadRows();
+                    SetService(picker.Selected);
                 }
             }
+        }
+
+        private void ResolveTypedService()
+        {
+            var typed = _serviceCodeBox.Text.Trim();
+            if (string.IsNullOrEmpty(typed))
+            {
+                _service = null;
+                _serviceNameLabel.Text = string.Empty;
+                return;
+            }
+            var found = _serviceRepo.FindByCode(typed);
+            if (found == null)
+            {
+                _service = null;
+                _serviceNameLabel.Text = string.Empty;
+                _errorLabel.Text = "Service Inexistant";
+            }
+            else
+            {
+                SetService(found);
+            }
+        }
+
+        private void SetService(ServiceLookup service)
+        {
+            _service = service;
+            _serviceCodeBox.Text = service.Code;
+            _serviceNameLabel.Text = service.Name;
+            _errorLabel.Text = string.Empty;
+            LoadRows();
         }
 
         private void LoadRows()
@@ -313,21 +345,43 @@ namespace Epipharm.App
             _totalLabel.Text = $"Total : {total / 100m:N2} DZD";
         }
 
-        private void AttemptSave()
+        private void AttemptCloseWithConfirm()
+        {
+            var hasContent = _rows.Any(r => r.QuantityToDeliver > 0) ||
+                              !string.IsNullOrWhiteSpace(_documentNoBox.Text);
+            if (!hasContent)
+            {
+                Close();
+                return;
+            }
+
+            if (!DosConfirmForm.Ask(this, "Enregistrer"))
+            {
+                Close();
+                return;
+            }
+
+            if (TrySave())
+            {
+                Close();
+            }
+        }
+
+        private bool TrySave()
         {
             _errorLabel.Text = string.Empty;
             try
             {
                 var deliveryId = _entryRepo.Save(_service, _documentNoBox.Text, _operationDatePicker.Value.Date,
                     _rows.ToList(), _accountId);
-                MessageBox.Show(this, $"Livraison enregistree (No {deliveryId}).", "EPIPHARM",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-                DialogResult = DialogResult.OK;
-                Close();
+                _errorLabel.ForeColor = RetroTheme.FieldValue;
+                _errorLabel.Text = $"Livraison enregistree (No {deliveryId}).";
+                return true;
             }
             catch (InvalidOperationException ex)
             {
                 _errorLabel.Text = ex.Message;
+                return false;
             }
         }
     }

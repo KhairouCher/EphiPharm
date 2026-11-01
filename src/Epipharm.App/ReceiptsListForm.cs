@@ -127,7 +127,7 @@ namespace Epipharm.App
             grid.Columns.Add(new DataGridViewTextBoxColumn
             {
                 Name = "date", HeaderText = "Date", DataPropertyName = "ReceivedOn", FillWeight = 12,
-                DefaultCellStyle = { Format = "dd/MM/yyyy", Alignment = DataGridViewContentAlignment.MiddleCenter }
+                DefaultCellStyle = { Format = RetroTheme.DosDateFormat, Alignment = DataGridViewContentAlignment.MiddleCenter }
             });
             grid.Columns.Add(new DataGridViewTextBoxColumn
             { Name = "doc", HeaderText = "N. Piece", DataPropertyName = "DocumentNo", FillWeight = 16 });
