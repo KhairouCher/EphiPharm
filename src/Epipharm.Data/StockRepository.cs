@@ -71,6 +71,54 @@ namespace Epipharm.Data
             return results;
         }
 
+        /// <summary>"Liste des Produits Perimes a Retirer Immediatement du
+        /// Stock" (MENU_MAP.md section 1) — every lot already past its
+        /// expiry date with stock still on hand. Reuses the same
+        /// expired/expires_on logic StockListForm already highlights in
+        /// red, as its own dedicated list rather than a second
+        /// implementation of "what counts as expired".</summary>
+        public List<StockLotView> SearchExpired()
+        {
+            var results = new List<StockLotView>();
+
+            using (var conn = Open())
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText =
+                    "SELECT sl.id, p.name AS product_name, d.name AS dci_name, f.name AS form_name, " +
+                    "sl.lot_number, sl.expires_on, sl.quantity, sl.unit_price_centimes " +
+                    "FROM stock_lots sl " +
+                    "JOIN products p ON p.id = sl.product_id " +
+                    "LEFT JOIN dci d ON d.id = p.dci_id " +
+                    "LEFT JOIN dosage_forms f ON f.id = p.form_id " +
+                    "WHERE sl.quantity > 0 AND sl.expires_on IS NOT NULL AND sl.expires_on < @today " +
+                    "ORDER BY sl.expires_on, p.name;";
+                cmd.Parameters.AddWithValue("@today", DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        results.Add(new StockLotView
+                        {
+                            Id = Convert.ToInt32(reader["id"]),
+                            ProductName = reader["product_name"] as string,
+                            DciName = reader["dci_name"] as string,
+                            FormName = reader["form_name"] as string,
+                            LotNumber = reader["lot_number"] as string,
+                            ExpiresOn = ParseDate(reader["expires_on"] as string),
+                            Quantity = Convert.ToInt32(reader["quantity"]),
+                            UnitPriceCentimes = reader["unit_price_centimes"] == DBNull.Value
+                                ? (int?)null
+                                : Convert.ToInt32(reader["unit_price_centimes"])
+                        });
+                    }
+                }
+            }
+
+            return results;
+        }
+
         public int GetExpiryWarningDays()
         {
             using (var conn = Open())

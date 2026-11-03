@@ -17,7 +17,7 @@ namespace Epipharm.App.Theme
             Action openReceiptEntry, Action openDeliveriesList, Action<string> openDeliveryEntry,
             Action<string> openDotationEntry, Action openDciInfo, Action openTransferEntry,
             Action<string> openReferenceList, Action openCommandeEntry, Action openCommandesList,
-            Action<string> showNotBuilt)
+            Action openExpiredStockList, Action<string> showNotBuilt)
         {
             MenuOption Leaf(string name) => new MenuOption(name, () => showNotBuilt(name));
 
@@ -35,7 +35,7 @@ namespace Epipharm.App.Theme
                     Leaf("Initialisation Stock"),
                     Leaf("Corrections de Stock"),
                     Leaf("Initialisation des Seuils Stocks"),
-                    Leaf("Liste des Produits Perimes a Retirer"),
+                    new MenuOption("Liste des Produits Perimes a Retirer", openExpiredStockList),
                     new MenuOption("Mise a Jour des Dotations en Medicaments Usuels", () => openDotationEntry("medicament")),
                     new MenuOption("Mise a Jour des Dotations en Psychotropes", () => openDotationEntry("psychotrope")),
                     new MenuOption("Mise a Jour des Dotations Autres Medicaments", () => openDotationEntry("autre")),
