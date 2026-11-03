@@ -16,7 +16,8 @@ namespace Epipharm.App.Theme
         public static List<MenuCategory> BuildCategories(Action openStock, Action openReceiptsList,
             Action openReceiptEntry, Action openDeliveriesList, Action<string> openDeliveryEntry,
             Action<string> openDotationEntry, Action openDciInfo, Action openTransferEntry,
-            Action<string> openReferenceList, Action<string> showNotBuilt)
+            Action<string> openReferenceList, Action openCommandeEntry, Action openCommandesList,
+            Action<string> showNotBuilt)
         {
             MenuOption Leaf(string name) => new MenuOption(name, () => showNotBuilt(name));
 
@@ -89,9 +90,13 @@ namespace Epipharm.App.Theme
                 // within this category not screenshot-confirmed.
                 new MenuCategory("APPROVISIONNEMENT", new List<MenuOption>
                 {
-                    Leaf("Edition Commande"),
-                    Leaf("Liste des Commandes"),
-                    Leaf("Annulation Commande"),
+                    new MenuOption("Edition Commande", openCommandeEntry),
+                    new MenuOption("Liste des Commandes", openCommandesList),
+                    // Annulation Commande is F2 on that same list screen
+                    // (MENU_MAP.md lists it as a single action, not a
+                    // multi-field screen of its own — see
+                    // CommandesListForm's doc comment), not a separate form.
+                    new MenuOption("Annulation Commande", openCommandesList),
                     new MenuOption("Reception de Produits", openReceiptEntry),
                     Leaf("Duplicata de Bon de Reception"),
                     new MenuOption("Liste Globale des Bons de Reception", openReceiptsList),

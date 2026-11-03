@@ -82,6 +82,7 @@ namespace Epipharm.App
 
             _categories = MenuData.BuildCategories(OpenStock, OpenReceipts, OpenReceiptEntry, OpenDeliveries,
                 OpenDeliveryEntry, OpenDotationEntry, OpenDciInfo, OpenTransferEntry, OpenReferenceList,
+                OpenCommandeEntry, OpenCommandesList,
                 ShowNotBuilt);
             if (account.IsAdmin)
             {
@@ -327,6 +328,26 @@ namespace Epipharm.App
         {
             var repo = new DeliveryRepository(_dbPath);
             using (var form = new DeliveriesListForm(repo))
+            {
+                form.ShowDialog(this);
+            }
+        }
+
+        private void OpenCommandeEntry()
+        {
+            var entryRepo = new CommandeRepository(_dbPath);
+            var supplierRepo = new SupplierRepository(_dbPath);
+            var dciRepo = new DciRepository(_dbPath);
+            using (var form = new CommandeEntryForm(entryRepo, supplierRepo, dciRepo, _account.Id))
+            {
+                form.ShowDialog(this);
+            }
+        }
+
+        private void OpenCommandesList()
+        {
+            var repo = new CommandeRepository(_dbPath);
+            using (var form = new CommandesListForm(repo, _account.Id))
             {
                 form.ShowDialog(this);
             }
