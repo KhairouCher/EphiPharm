@@ -5,22 +5,28 @@ using System.Data.SQLite;
 namespace Epipharm.Data
 {
     /// <summary>
-    /// "Mise a Jour des Dotations en Medicaments Usuels" — set every
-    /// Medicaments Usuels DCI's weekly allocation for a service (DCI has
-    /// no real "discontinued" flag to filter on — see GetRows). This is
-    /// what DeliveryEntryRepository's "Dota." column actually reads, so
+    /// "Mise a Jour des Dotations en Medicaments Usuels/Psychotropes/
+    /// Autres Medicaments/Stupefiants" — set every DCI of one drug
+    /// category's weekly allocation for a service (DCI has no real
+    /// "discontinued" flag to filter on — see GetRows). This is what
+    /// DeliveryEntryRepository's "Dota." column actually reads, so
     /// without this screen the dotation figures could only ever come from
     /// the original DBF import, never be set or changed for real.
+    ///
+    /// One instance per drug_category — the four "Mise a Jour des
+    /// Dotations..." menu leaves (MENU_MAP.md section 5) are this same
+    /// screen/repository parameterized by category, not four separate
+    /// implementations.
     /// </summary>
     public class DotationEntryRepository
     {
-        private const string DrugCategory = "medicament";
-
+        private readonly string _drugCategory;
         private readonly string _connectionString;
 
-        public DotationEntryRepository(string databasePath)
+        public DotationEntryRepository(string databasePath, string drugCategory)
         {
             _connectionString = $"Data Source={databasePath};Version=3;Foreign Keys=True;";
+            _drugCategory = drugCategory ?? throw new ArgumentNullException(nameof(drugCategory));
         }
 
         private SQLiteConnection Open()
@@ -49,7 +55,7 @@ namespace Epipharm.Data
                     "WHERE d.drug_category = @category " +
                     "ORDER BY d.legacy_code;";
                 cmd.Parameters.AddWithValue("@service", serviceId);
-                cmd.Parameters.AddWithValue("@category", DrugCategory);
+                cmd.Parameters.AddWithValue("@category", _drugCategory);
                 cmd.Parameters.AddWithValue("@year", year);
                 cmd.Parameters.AddWithValue("@week", week);
 
@@ -104,7 +110,7 @@ namespace Epipharm.Data
                                     "AND drug_category=@category AND year=@year AND week=@week;";
                                 cmd.Parameters.AddWithValue("@service", serviceId);
                                 cmd.Parameters.AddWithValue("@dci", row.DciId);
-                                cmd.Parameters.AddWithValue("@category", DrugCategory);
+                                cmd.Parameters.AddWithValue("@category", _drugCategory);
                                 cmd.Parameters.AddWithValue("@year", year);
                                 cmd.Parameters.AddWithValue("@week", week);
                                 var result = cmd.ExecuteScalar();
@@ -128,7 +134,7 @@ namespace Epipharm.Data
                                         "VALUES ('23124010', @service, @dci, @category, @qty, @year, @week, 0, 0);";
                                     cmd.Parameters.AddWithValue("@service", serviceId);
                                     cmd.Parameters.AddWithValue("@dci", row.DciId);
-                                    cmd.Parameters.AddWithValue("@category", DrugCategory);
+                                    cmd.Parameters.AddWithValue("@category", _drugCategory);
                                     cmd.Parameters.AddWithValue("@qty", row.Dotation);
                                     cmd.Parameters.AddWithValue("@year", year);
                                     cmd.Parameters.AddWithValue("@week", week);
@@ -146,7 +152,7 @@ namespace Epipharm.Data
                                 "VALUES (@account, 'allocations', 'update', @detail);";
                             cmd.Parameters.AddWithValue("@account", accountId);
                             cmd.Parameters.AddWithValue("@detail",
-                                $"Mise a jour dotations medicaments — service {serviceId}, annee {year}, semaine {week}, {changed} DCI");
+                                $"Mise a jour dotations ({_drugCategory}) — service {serviceId}, annee {year}, semaine {week}, {changed} DCI");
                             cmd.ExecuteNonQuery();
                         }
 

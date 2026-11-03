@@ -81,7 +81,7 @@ namespace Epipharm.App
             Controls.Add(_header);
 
             _categories = MenuData.BuildCategories(OpenStock, OpenReceipts, OpenReceiptEntry, OpenDeliveries,
-                OpenDeliveryEntryMedicaments, OpenDotationEntryMedicaments, OpenDciInfo, OpenTransferEntry,
+                OpenDeliveryEntry, OpenDotationEntry, OpenDciInfo, OpenTransferEntry, OpenReferenceList,
                 ShowNotBuilt);
             if (account.IsAdmin)
             {
@@ -207,11 +207,23 @@ namespace Epipharm.App
             }
         }
 
-        private void OpenDeliveryEntryMedicaments()
+        // "(Medicaments)" is the only one of the three confirmed from a
+        // real screenshot; Psychotropes/Autres Medicaments follow the same
+        // pattern using the 3rd-level popup's own confirmed names — see
+        // DeliveryEntryForm's constructor doc comment.
+        private static readonly Dictionary<string, string> DeliverySubtitleByCategory = new Dictionary<string, string>
         {
-            var entryRepo = new DeliveryEntryRepository(_dbPath);
+            ["medicament"] = "Livraison sur Bon de Commande (Medicaments)",
+            ["psychotrope"] = "Livraison sur Bon de Commande (Psychotropes)",
+            ["autre"] = "Livraison sur Bon de Commande (Autres Medicaments)",
+        };
+
+        private void OpenDeliveryEntry(string drugCategory)
+        {
+            var entryRepo = new DeliveryEntryRepository(_dbPath, drugCategory);
             var serviceRepo = new ServiceRepository(_dbPath);
-            using (var form = new DeliveryEntryForm(entryRepo, serviceRepo, _account.Id))
+            using (var form = new DeliveryEntryForm(entryRepo, serviceRepo, _account.Id,
+                DeliverySubtitleByCategory[drugCategory]))
             {
                 form.ShowDialog(this);
             }
@@ -228,6 +240,56 @@ namespace Epipharm.App
             }
         }
 
+        /// <summary>Opens one of the 8 simple DONNEES NATIONALES reference
+        /// lists — see ReferenceRepository's doc comment for why these use
+        /// a generic screen rather than one bespoke layout per table.</summary>
+        private void OpenReferenceList(string key)
+        {
+            var repo = new ReferenceRepository(_dbPath);
+            ReferenceListForm form;
+            switch (key)
+            {
+                case "classes":
+                    form = new ReferenceListForm("Classes Therapeutiques", "Classes Therapeutiques",
+                        "Code", "Libelle", null, q => repo.SearchClasses(q));
+                    break;
+                case "subclasses":
+                    form = new ReferenceListForm("S/Classes Therapeutiques", "S/Classes Therapeutiques",
+                        "Code", "Libelle", "Classe", q => repo.SearchSubclasses(q));
+                    break;
+                case "centers":
+                    form = new ReferenceListForm("Fichier des Etablissements", "Fichier des Etablissements",
+                        "Code", "Libelle", "Region", q => repo.SearchCenters(q));
+                    break;
+                case "services":
+                    form = new ReferenceListForm("Table des Services", "Table des Services",
+                        "Code", "Libelle", "Etablissement", q => repo.SearchServices(q));
+                    break;
+                case "countries":
+                    form = new ReferenceListForm("Table des Pays", "Table des Pays",
+                        "Code", "Libelle", "Sigle", q => repo.SearchCountries(q));
+                    break;
+                case "wilayas":
+                    form = new ReferenceListForm("Table des Wilayate", "Table des Wilayate",
+                        "Code", "Libelle", null, q => repo.SearchWilayas(q));
+                    break;
+                case "geocodes":
+                    form = new ReferenceListForm("Table des Codes Geographiques", "Table des Codes Geographiques",
+                        "Code", "Libelle", "Wilaya", q => repo.SearchGeoCodes(q));
+                    break;
+                case "sectors":
+                    form = new ReferenceListForm("Table des Secteurs Sanitaires", "Table des Secteurs Sanitaires",
+                        "Code", "Libelle", null, q => repo.SearchSanitarySectors(q));
+                    break;
+                default:
+                    return;
+            }
+            using (form)
+            {
+                form.ShowDialog(this);
+            }
+        }
+
         private void OpenDciInfo()
         {
             var dciRepo = new DciRepository(_dbPath);
@@ -237,11 +299,25 @@ namespace Epipharm.App
             }
         }
 
-        private void OpenDotationEntryMedicaments()
+        // Each wording below is MENU_MAP.md's own exact (and irregular —
+        // "en Medicaments"/"en Psychotropes" but "Autres Medicaments"/
+        // "Dotations Stupefiants" with no "en"/"des") confirmed leaf text,
+        // not a template with the category substituted in.
+        private static readonly Dictionary<string, (string Title, string Subtitle)> DotationTextByCategory =
+            new Dictionary<string, (string, string)>
         {
-            var entryRepo = new DotationEntryRepository(_dbPath);
+            ["medicament"] = ("Dotations Medicaments Usuels", "Mise a Jour des Dotations en Medicaments Usuels"),
+            ["psychotrope"] = ("Dotations Psychotropes", "Mise a Jour des Dotations en Psychotropes"),
+            ["autre"] = ("Dotations Autres Medicaments", "Mise a Jour des Dotations Autres Medicaments"),
+            ["stupefiant"] = ("Dotations Stupefiants", "Mise a Jour Dotations Stupefiants"),
+        };
+
+        private void OpenDotationEntry(string drugCategory)
+        {
+            var entryRepo = new DotationEntryRepository(_dbPath, drugCategory);
             var serviceRepo = new ServiceRepository(_dbPath);
-            using (var form = new DotationEntryForm(entryRepo, serviceRepo, _account.Id))
+            var (title, subtitle) = DotationTextByCategory[drugCategory];
+            using (var form = new DotationEntryForm(entryRepo, serviceRepo, _account.Id, title, subtitle))
             {
                 form.ShowDialog(this);
             }

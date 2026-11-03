@@ -47,7 +47,15 @@ namespace Epipharm.App
         private ServiceLookup _service;
         private BindingList<DotationRow> _rows = new BindingList<DotationRow>();
 
-        public DotationEntryForm(DotationEntryRepository entryRepo, ServiceRepository serviceRepo, int accountId)
+        /// <param name="windowTitle">Short title for the window/taskbar.</param>
+        /// <param name="subtitle">The exact menu wording for this
+        /// category — MENU_MAP.md's four dotation leaves are irregular
+        /// ("...en Medicaments Usuels", "...en Psychotropes", "...Autres
+        /// Medicaments" with no "en", "...Dotations Stupefiants" with no
+        /// "des"), not a template with the category substituted in, so
+        /// each caller passes its own exact confirmed wording.</param>
+        public DotationEntryForm(DotationEntryRepository entryRepo, ServiceRepository serviceRepo, int accountId,
+            string windowTitle, string subtitle)
         {
             _entryRepo = entryRepo ?? throw new ArgumentNullException(nameof(entryRepo));
             _serviceRepo = serviceRepo ?? throw new ArgumentNullException(nameof(serviceRepo));
@@ -56,14 +64,14 @@ namespace Epipharm.App
             _year = today.Year;
             _week = DeliveryEntryRepository.WeekOfYear(today);
 
-            Text = "EPIPHARM — Dotations Medicaments Usuels";
+            Text = "EPIPHARM — " + windowTitle;
             StartPosition = FormStartPosition.CenterScreen;
             ClientSize = new Size(900, 680);
             MinimumSize = new Size(700, 500);
             KeyPreview = true;
             BackColor = RetroTheme.BrowseBackground;
 
-            _header = new DosHeaderBar { Subtitle = "Mise a Jour des Dotations en Medicaments Usuels" };
+            _header = new DosHeaderBar { Subtitle = subtitle };
             _footer = new DosFooterBar();
             _footer.SetHints(("F5", "Choisir Service"), ("Esc", "Sortie"));
 

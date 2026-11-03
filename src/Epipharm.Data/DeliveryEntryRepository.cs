@@ -7,30 +7,36 @@ using System.Linq;
 namespace Epipharm.Data
 {
     /// <summary>
-    /// "Livraison sur Bon de Commande (Medicaments)" (MENU_MAP.md section
-    /// 2) — deliver against a service's weekly dotation for the
-    /// Medicaments Usuels category. Saving decreases stock (nearest-expiry
-    /// lot first — this rebuild's own choice, not confirmed from the real
-    /// app, but the obvious pharmacy rule and consistent with
-    /// StockListForm's expired/expiring-soon highlighting), increases the
-    /// matching allocation's delivered_qty, and writes one deliveries row
-    /// + one movements row per lot actually drawn from, in one transaction.
+    /// "Livraison sur Bon de Commande" (MENU_MAP.md section 2) — deliver
+    /// against a service's weekly dotation. Saving decreases stock
+    /// (nearest-expiry lot first — this rebuild's own choice, not
+    /// confirmed from the real app, but the obvious pharmacy rule and
+    /// consistent with StockListForm's expired/expiring-soon
+    /// highlighting), increases the matching allocation's delivered_qty,
+    /// and writes one deliveries row + one movements row per lot actually
+    /// drawn from, in one transaction.
     ///
-    /// Only the Medicaments Usuels category is built — the real screen has
-    /// a 3rd-level choice (Medicaments Usuels / Psychotropes / Autres
-    /// Medicaments, see UI_SPEC.md) and this rebuild only implements the
-    /// first; see MenuData.cs.
+    /// One instance per drug category — the real screen's 3rd-level
+    /// choice (Medicaments Usuels / Psychotropes / Autres Medicaments,
+    /// see UI_SPEC.md) plus Stupefiants (a separate top-level menu item,
+    /// "Ordonnance Stupefiants (Hors Dotation)" aside — this is the
+    /// regular dotation-tracked path) is this same screen/repository
+    /// parameterized by category, not four separate implementations.
+    /// movement_type stays '3' (the dominant code for this shape in the
+    /// real data, 15553/16158) for every category: nothing in the real
+    /// data distinguishes a per-category TYPE_MVT, so inventing one would
+    /// be guessing, not reusing a confirmed pattern.
     /// </summary>
     public class DeliveryEntryRepository
     {
         private const string DeliveryMovementType = "3"; // dominant code for this shape in the real data (15553/16158)
-        private const string DrugCategory = "medicament";
-
+        private readonly string _drugCategory;
         private readonly string _connectionString;
 
-        public DeliveryEntryRepository(string databasePath)
+        public DeliveryEntryRepository(string databasePath, string drugCategory)
         {
             _connectionString = $"Data Source={databasePath};Version=3;Foreign Keys=True;";
+            _drugCategory = drugCategory ?? throw new ArgumentNullException(nameof(drugCategory));
         }
 
         private SQLiteConnection Open()
@@ -92,7 +98,7 @@ namespace Epipharm.Data
                     "AND a.year = @year AND a.week = @week " +
                     "ORDER BY d.legacy_code;";
                 cmd.Parameters.AddWithValue("@service", serviceId);
-                cmd.Parameters.AddWithValue("@category", DrugCategory);
+                cmd.Parameters.AddWithValue("@category", _drugCategory);
                 cmd.Parameters.AddWithValue("@year", year);
                 cmd.Parameters.AddWithValue("@week", week);
 
@@ -320,7 +326,7 @@ namespace Epipharm.Data
             }
         }
 
-        private static void UpdateAllocationDelivered(SQLiteConnection conn, SQLiteTransaction tx, int serviceId,
+        private void UpdateAllocationDelivered(SQLiteConnection conn, SQLiteTransaction tx, int serviceId,
             int dciId, int year, int week, int quantity)
         {
             using (var cmd = conn.CreateCommand())
@@ -333,7 +339,7 @@ namespace Epipharm.Data
                 cmd.Parameters.AddWithValue("@qty", quantity);
                 cmd.Parameters.AddWithValue("@service", serviceId);
                 cmd.Parameters.AddWithValue("@dci", dciId);
-                cmd.Parameters.AddWithValue("@category", DrugCategory);
+                cmd.Parameters.AddWithValue("@category", _drugCategory);
                 cmd.Parameters.AddWithValue("@year", year);
                 cmd.Parameters.AddWithValue("@week", week);
                 cmd.ExecuteNonQuery();

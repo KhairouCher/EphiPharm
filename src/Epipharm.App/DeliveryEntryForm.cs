@@ -56,7 +56,14 @@ namespace Epipharm.App
         private ServiceLookup _service;
         private BindingList<DeliveryAllocationRow> _rows = new BindingList<DeliveryAllocationRow>();
 
-        public DeliveryEntryForm(DeliveryEntryRepository entryRepo, ServiceRepository serviceRepo, int accountId)
+        /// <param name="subtitle">The exact screen title to show — only
+        /// "Livraison sur Bon de Commande (Medicaments)" is confirmed from
+        /// a real screenshot; the Psychotropes/Autres Medicaments variants
+        /// follow the same pattern, matching the 3rd-level popup's own
+        /// confirmed item names (UI_SPEC.md), but aren't independently
+        /// screenshot-confirmed as this screen's own subtitle text.</param>
+        public DeliveryEntryForm(DeliveryEntryRepository entryRepo, ServiceRepository serviceRepo, int accountId,
+            string subtitle)
         {
             _entryRepo = entryRepo ?? throw new ArgumentNullException(nameof(entryRepo));
             _serviceRepo = serviceRepo ?? throw new ArgumentNullException(nameof(serviceRepo));
@@ -69,7 +76,7 @@ namespace Epipharm.App
             KeyPreview = true;
             BackColor = RetroTheme.MenuBackground;
 
-            _header = new DosHeaderBar { Subtitle = "Livraison sur Bon de Commande (Medicaments)" };
+            _header = new DosHeaderBar { Subtitle = subtitle };
             _footer = new DosFooterBar();
             _footer.SetHints(("F5", "Choisir Service"), ("Esc", "Sortie"));
 

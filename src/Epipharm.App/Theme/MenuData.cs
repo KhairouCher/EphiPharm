@@ -14,9 +14,9 @@ namespace Epipharm.App.Theme
     public static class MenuData
     {
         public static List<MenuCategory> BuildCategories(Action openStock, Action openReceiptsList,
-            Action openReceiptEntry, Action openDeliveriesList, Action openDeliveryEntryMedicaments,
-            Action openDotationEntryMedicaments, Action openDciInfo, Action openTransferEntry,
-            Action<string> showNotBuilt)
+            Action openReceiptEntry, Action openDeliveriesList, Action<string> openDeliveryEntry,
+            Action<string> openDotationEntry, Action openDciInfo, Action openTransferEntry,
+            Action<string> openReferenceList, Action<string> showNotBuilt)
         {
             MenuOption Leaf(string name) => new MenuOption(name, () => showNotBuilt(name));
 
@@ -35,25 +35,25 @@ namespace Epipharm.App.Theme
                     Leaf("Corrections de Stock"),
                     Leaf("Initialisation des Seuils Stocks"),
                     Leaf("Liste des Produits Perimes a Retirer"),
-                    new MenuOption("Mise a Jour des Dotations en Medicaments Usuels", openDotationEntryMedicaments),
-                    Leaf("Mise a Jour des Dotations en Psychotropes"),
-                    Leaf("Mise a Jour des Dotations Autres Medicaments"),
-                    Leaf("Mise a Jour Dotations Stupefiants"),
+                    new MenuOption("Mise a Jour des Dotations en Medicaments Usuels", () => openDotationEntry("medicament")),
+                    new MenuOption("Mise a Jour des Dotations en Psychotropes", () => openDotationEntry("psychotrope")),
+                    new MenuOption("Mise a Jour des Dotations Autres Medicaments", () => openDotationEntry("autre")),
+                    new MenuOption("Mise a Jour Dotations Stupefiants", () => openDotationEntry("stupefiant")),
                 }),
 
                 // Screenshot confirmed (UI_SPEC.md "Confirms / extends
                 // MENU_MAP.md"), including order.
                 new MenuCategory("DONNEES NATIONALES", new List<MenuOption>
                 {
-                    Leaf("Classes Therapeutiques"),
-                    Leaf("S/Classes Therapeutiques"),
+                    new MenuOption("Classes Therapeutiques", () => openReferenceList("classes")),
+                    new MenuOption("S/Classes Therapeutiques", () => openReferenceList("subclasses")),
                     new MenuOption("Nomenclature Nationale", openDciInfo),
-                    Leaf("Fichier des Etablissements"),
-                    Leaf("Table des Services"),
-                    Leaf("Table des Pays"),
-                    Leaf("Table des Wilayate"),
-                    Leaf("Table des Codes Geographiques"),
-                    Leaf("Table des Secteurs Sanitaires"),
+                    new MenuOption("Fichier des Etablissements", () => openReferenceList("centers")),
+                    new MenuOption("Table des Services", () => openReferenceList("services")),
+                    new MenuOption("Table des Pays", () => openReferenceList("countries")),
+                    new MenuOption("Table des Wilayate", () => openReferenceList("wilayas")),
+                    new MenuOption("Table des Codes Geographiques", () => openReferenceList("geocodes")),
+                    new MenuOption("Table des Secteurs Sanitaires", () => openReferenceList("sectors")),
                 }),
 
                 // Screenshot confirmed, including order and the 3rd-level
@@ -63,9 +63,9 @@ namespace Epipharm.App.Theme
                 {
                     new MenuOption("Livraison sur Bon de Commande", subOptions: new List<MenuOption>
                     {
-                        new MenuOption("Medicaments Usuels", openDeliveryEntryMedicaments),
-                        Leaf("Psychotropes"),
-                        Leaf("Autres Medicaments"),
+                        new MenuOption("Medicaments Usuels", () => openDeliveryEntry("medicament")),
+                        new MenuOption("Psychotropes", () => openDeliveryEntry("psychotrope")),
+                        new MenuOption("Autres Medicaments", () => openDeliveryEntry("autre")),
                     }),
                     Leaf("Livraison sur Ordonnance Interne"),
                     Leaf("Ordonnance Stupefiants (Hors Dotation)"),
