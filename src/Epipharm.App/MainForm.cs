@@ -87,8 +87,8 @@ namespace Epipharm.App
             {
                 _categories.Add(new MenuCategory("ADMINISTRATION", new List<MenuOption>
                 {
-                    new MenuOption("Comptes Utilisateurs", () => ShowNotBuilt("Comptes Utilisateurs")),
-                    new MenuOption("Parametres d'Exploitation", () => ShowNotBuilt("Parametres d'Exploitation")),
+                    new MenuOption("Comptes Utilisateurs", OpenAccountsAdmin),
+                    new MenuOption("Parametres d'Exploitation", OpenSettings),
                 }));
             }
 
@@ -327,6 +327,24 @@ namespace Epipharm.App
         {
             var repo = new DeliveryRepository(_dbPath);
             using (var form = new DeliveriesListForm(repo))
+            {
+                form.ShowDialog(this);
+            }
+        }
+
+        private void OpenAccountsAdmin()
+        {
+            var repo = new AccountRepository(_dbPath);
+            using (var form = new AccountsAdminForm(repo))
+            {
+                form.ShowDialog(this);
+            }
+        }
+
+        private void OpenSettings()
+        {
+            var repo = new SettingsRepository(_dbPath);
+            using (var form = new SettingsForm(repo, _account.Id))
             {
                 form.ShowDialog(this);
             }

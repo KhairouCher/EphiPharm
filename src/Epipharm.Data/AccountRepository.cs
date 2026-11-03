@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Data.SQLite;
+using System.Security.Cryptography;
 
 namespace Epipharm.Data
 {
@@ -66,6 +68,73 @@ namespace Epipharm.Data
                     };
                 }
             }
+        }
+
+        /// <summary>"Comptes Utilisateurs" (Administration) — every
+        /// account, for an admin to see who has access and whether they've
+        /// actually set their own password yet (MustChangePassword=true
+        /// means they're still on whatever reset generated).</summary>
+        public List<Account> ListAccounts()
+        {
+            var results = new List<Account>();
+            using (var conn = Open())
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText =
+                    "SELECT id, username, legacy_rights, role, must_change_password FROM accounts ORDER BY username;";
+                using (var reader = cmd.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        results.Add(new Account
+                        {
+                            Id = Convert.ToInt32(reader["id"]),
+                            Username = (string)reader["username"],
+                            LegacyRights = reader["legacy_rights"] as string,
+                            Role = (string)reader["role"],
+                            MustChangePassword = Convert.ToInt64(reader["must_change_password"]) != 0
+                        });
+                    }
+                }
+            }
+            return results;
+        }
+
+        /// <summary>Sets a new random temporary password for an account
+        /// (forces must_change_password=1, same as scripts/
+        /// generate_accounts.py's original reset) and returns it in plain
+        /// text so the caller can show it to the admin exactly once —
+        /// nothing here persists the plaintext anywhere.</summary>
+        public string ResetPassword(int accountId)
+        {
+            const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+            var bytes = new byte[12];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(bytes);
+            }
+            var chars = new char[bytes.Length];
+            for (var i = 0; i < bytes.Length; i++)
+            {
+                chars[i] = alphabet[bytes[i] % alphabet.Length];
+            }
+            var newPassword = new string(chars);
+
+            var salt = PasswordHasher.NewSalt();
+            var hash = PasswordHasher.Hash(newPassword, salt);
+            using (var conn = Open())
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText =
+                    "UPDATE accounts SET password_hash = @hash, password_salt = @salt, " +
+                    "pbkdf2_iterations = @iterations, must_change_password = 1 WHERE id = @id;";
+                cmd.Parameters.AddWithValue("@hash", hash);
+                cmd.Parameters.AddWithValue("@salt", salt);
+                cmd.Parameters.AddWithValue("@iterations", PasswordHasher.Iterations);
+                cmd.Parameters.AddWithValue("@id", accountId);
+                cmd.ExecuteNonQuery();
+            }
+            return newPassword;
         }
 
         public void SetPassword(int accountId, string newPassword)
